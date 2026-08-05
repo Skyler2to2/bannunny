@@ -904,6 +904,23 @@
   .cl-addtext button{border:0;border-radius:5px;padding:0 10px;cursor:pointer;font-family:var(--mono);font-size:10px;
     color:var(--phos-dim);background:rgba(0,0,0,.3);box-shadow:inset 0 0 0 .5px rgba(198,208,224,.2)}
   .cl-addtext button:hover{color:var(--phos);box-shadow:inset 0 0 0 1px rgba(198,208,224,.4)}
+  /* 文字属性面板：选中拼贴文字时显示，支持字体/花字/变形/颜色 */
+  .cl-txtpanel{display:none;flex-direction:column;gap:7px;padding:9px 10px;border-radius:6px;
+    background:rgba(0,0,0,.3);box-shadow:inset 0 0 0 .5px rgba(198,208,224,.2)}
+  .cl-txtpanel.on{display:flex}
+  .cl-txtpanel .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  .cl-txtpanel .lb{font-size:9px;letter-spacing:.12em;color:var(--phos-dim);text-transform:uppercase}
+  .cl-txtpanel input[type=text]{flex:1;min-width:120px;border:0;border-radius:5px;padding:6px 9px;
+    font-family:var(--mono);font-size:12px;color:var(--phos);background:rgba(0,0,0,.32);box-shadow:inset 0 0 0 .5px rgba(198,208,224,.2)}
+  .cl-txtpanel select{border:0;border-radius:5px;padding:5px 7px;font-size:11px;color:var(--phos);
+    background:rgba(0,0,0,.42);box-shadow:inset 0 0 0 .5px rgba(198,208,224,.2)}
+  .cl-txtpanel .fx{display:flex;gap:5px;flex-wrap:wrap}
+  .cl-txtpanel .fx button{border:0;border-radius:5px;padding:5px 9px;cursor:pointer;font-size:10px;
+    color:var(--phos-dim);background:rgba(0,0,0,.32);box-shadow:inset 0 0 0 .5px rgba(198,208,224,.2)}
+  .cl-txtpanel .fx button.on{color:var(--phos);box-shadow:0 0 0 1.4px var(--phos)}
+  .cl-txtpanel .cwrap{position:relative;width:26px;height:26px;border-radius:5px;overflow:hidden;box-shadow:inset 0 0 0 .5px rgba(0,0,0,.5)}
+  .cl-txtpanel .cwrap input{position:absolute;inset:-4px;width:calc(100% + 8px);height:calc(100% + 8px);border:0;padding:0;cursor:pointer;background:none}
+  .cl-txtpanel input[type=range]{flex:1;min-width:90px;accent-color:var(--phos)}
   /* 右侧拼贴舞台 */
   .cl-main{flex:1;min-width:0;display:flex;flex-direction:column;gap:8px}
   .cl-bar{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
@@ -939,6 +956,13 @@
   .cl-overlay .cl-sel .h.br{right:-7px;bottom:-7px;cursor:nwse-resize}
   .cl-overlay .cl-sel .h.del{left:-7px;top:-7px;background:var(--proof);color:#fff;cursor:pointer;
     display:flex;align-items:center;justify-content:center;font-size:11px;line-height:1}
+  /* 旋转手柄：选中框顶部中间伸出，拖动即旋转素材/文字 */
+  .cl-overlay .cl-sel .h.rot{left:calc(50% - 7px);top:-30px;cursor:grab;background:var(--phos);
+    display:flex;align-items:center;justify-content:center}
+  .cl-overlay .cl-sel .h.rot svg{width:11px;height:11px}
+  .cl-overlay .cl-sel .h.rot svg path{fill:none;stroke:#1a1d26;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+  .cl-overlay .cl-sel .rotstem{position:absolute;left:50%;top:-16px;width:1px;height:16px;
+    background:var(--phos);transform:translateX(-.5px);pointer-events:none}
 
   /* 放大态 · 色板明细 */
   .m-pal-big{display:flex;flex-direction:column;gap:8px;color:var(--phos)}
@@ -2718,6 +2742,51 @@
     if(bg.type==="gradient" && !Array.isArray(bg.colors)) return {type:"gradient", colors:[palCols[0],palCols[palCols.length-1]]};
     return bg;
   }
+  /* 可选字体（Mac 中文字体优先，含通用回退）+ 花字/变形样式，供编辑器/卡片预览/导出共用 */
+  const FONTS=[
+    {key:'hei',    label:'黑体',  css:'-apple-system,"PingFang SC","Microsoft YaHei",sans-serif'},
+    {key:'kai',    label:'楷体',  css:'"STKaiti","Kaiti SC","KaiTi",serif'},
+    {key:'song',   label:'宋体',  css:'"Songti SC","STSong","SimSun",serif'},
+    {key:'yuan',   label:'圆体',  css:'"Yuanti SC","Yuanti",sans-serif'},
+    {key:'baoli',  label:'报隶',  css:'"Baoli SC",cursive'},
+    {key:'hand',   label:'手写',  css:'"Hannotate SC","Hanzipen SC",cursive'},
+    {key:'weibei', label:'魏碑',  css:'"Weibei SC",serif'},
+    {key:'libian', label:'隶书',  css:'"Libian SC","LiSu",serif'}
+  ];
+  function fontCss(key){ const f=FONTS.find(x=>x.key===key); return f?f.css:FONTS[0].css; }
+  // 生成一段文字元素的行内样式（花字 + 字体 + 变形），编辑器与卡片预览共用
+  function txtStyleInline(it){
+    const c=it.color||'#ffffff', c2=it.color2||'#31476f', st=it.style||'plain';
+    let s=`font-family:${fontCss(it.font||'hei')};font-weight:${it.weight||700};`+
+          `letter-spacing:${it.spacing!=null?it.spacing:0.1}em;`+
+          `transform:rotate(${it.rotate||0}deg);transform-origin:center;`;
+    if(st==='outline')      s+=`color:${c};-webkit-text-stroke:2px ${c2};paint-order:stroke fill;text-shadow:0 1px 3px rgba(0,0,0,.5);`;
+    else if(st==='hollow')  s+=`color:transparent;-webkit-text-stroke:2px ${c};text-shadow:none;`;
+    else if(st==='gradient')s+=`background:linear-gradient(180deg,${c},${c2});-webkit-background-clip:text;background-clip:text;color:transparent;-webkit-text-fill-color:transparent;text-shadow:none;`;
+    else if(st==='shadow')  s+=`color:${c};text-shadow:3px 3px 0 ${c2};`;
+    else if(st==='glow')    s+=`color:${c};text-shadow:0 0 8px ${c2},0 0 15px ${c2};`;
+    else                    s+=`color:${c};text-shadow:0 1px 3px rgba(0,0,0,.55);`;
+    return s;
+  }
+  // 把花字样式套到编辑器里的实时 DOM 元素上
+  function applyTxtStyleToEl(el,it){
+    const c=it.color||'#ffffff', c2=it.color2||'#31476f', st=it.style||'plain';
+    el.style.fontFamily=fontCss(it.font||'hei');
+    el.style.fontWeight=it.weight||700;
+    el.style.letterSpacing=(it.spacing!=null?it.spacing:0.1)+'em';
+    el.style.transform='rotate('+(it.rotate||0)+'deg)';
+    el.style.transformOrigin='center';
+    // 先清空可能残留的花字样式
+    el.style.webkitTextStroke=''; el.style.background='none';
+    el.style.webkitBackgroundClip=''; el.style.backgroundClip='';
+    el.style.webkitTextFillColor=''; el.style.paintOrder='';
+    if(st==='outline'){ el.style.color=c; el.style.webkitTextStroke='2px '+c2; el.style.paintOrder='stroke fill'; el.style.textShadow='0 1px 3px rgba(0,0,0,.5)'; }
+    else if(st==='hollow'){ el.style.color='transparent'; el.style.webkitTextStroke='2px '+c; el.style.textShadow='none'; }
+    else if(st==='gradient'){ el.style.background='linear-gradient(180deg,'+c+','+c2+')'; el.style.webkitBackgroundClip='text'; el.style.backgroundClip='text'; el.style.color='transparent'; el.style.webkitTextFillColor='transparent'; el.style.textShadow='none'; }
+    else if(st==='shadow'){ el.style.color=c; el.style.textShadow='3px 3px 0 '+c2; }
+    else if(st==='glow'){ el.style.color=c; el.style.textShadow='0 0 8px '+c2+',0 0 15px '+c2; }
+    else { el.style.color=c; el.style.textShadow='0 1px 3px rgba(0,0,0,.55)'; }
+  }
   function renderCollageEditor(n){
     const ctx=collageContext(n);
     // 背景：优先用户此前选的；否则用上游色板首/末色渐变
@@ -2780,6 +2849,7 @@
           `<button data-cl="export" title="导出 PNG"><svg viewBox="0 0 24 24"><path d="M12 4 V15 M8 11 L12 15 L16 11"/><path d="M5 15 V19 A1.5 1.5 0 0 0 6.5 20.5 H17.5 A1.5 1.5 0 0 0 19 19 V15"/></svg>导出PNG</button>`+
           `<button data-cl="apply" title="应用到卡片预览"><svg viewBox="0 0 24 24"><path d="M4 12 L10 18 L20 6"/></svg>应用到卡片</button>`+
         `</div>`+
+        `<div class="cl-txtpanel" id="clTxtPanel"></div>`+
         `<div class="cl-stagewrap"><div class="cl-stagebox" id="clBox"><div class="cl-stage" id="clStage"></div><div class="cl-overlay" id="clOverlay"></div></div></div>`+
       `</div></div>`;
 
@@ -2787,6 +2857,39 @@
     const box=mBody.querySelector("#clBox");
     const stage=mBody.querySelector("#clStage");
     const overlay=mBody.querySelector("#clOverlay");
+    const txtPanel=mBody.querySelector("#clTxtPanel");
+    // 选中文字素材时渲染属性面板（字体/花字/颜色/旋转/字距）
+    function renderTextPanel(){
+      const it=(selIdx>=0)?n._collage.items[selIdx]:null;
+      if(!it||it.type!=="txt"){ txtPanel.classList.remove("on"); txtPanel.innerHTML=""; return; }
+      txtPanel.classList.add("on");
+      const curFont=it.font||'hei', curStyle=it.style||'plain', curW=String(it.weight||700);
+      const styleDefs=[['plain','常规'],['outline','描边'],['hollow','空心'],['gradient','渐变'],['shadow','投影'],['glow','光晕']];
+      txtPanel.innerHTML=
+        `<div class="row"><input type="text" id="tpText" value="${escapeHTML(it.text||'')}" placeholder="文字内容"></div>`+
+        `<div class="row"><span class="lb">字体</span>`+
+          `<select id="tpFont">`+FONTS.map(f=>`<option value="${f.key}"${f.key===curFont?' selected':''}>${f.label}</option>`).join('')+`</select>`+
+          `<select id="tpWeight">`+[['400','细'],['700','粗'],['900','特粗']].map(w=>`<option value="${w[0]}"${curW===w[0]?' selected':''}>${w[1]}</option>`).join('')+`</select>`+
+        `</div>`+
+        `<div class="row"><span class="lb">花字</span><div class="fx" id="tpStyle">`+styleDefs.map(x=>`<button data-st="${x[0]}" class="${curStyle===x[0]?'on':''}">${x[1]}</button>`).join('')+`</div></div>`+
+        `<div class="row"><span class="lb">颜色</span>`+
+          `<span class="cwrap"><input type="color" id="tpColor" value="${it.color||'#ffffff'}"></span>`+
+          `<span class="lb">副色</span>`+
+          `<span class="cwrap"><input type="color" id="tpColor2" value="${it.color2||'#31476f'}"></span>`+
+        `</div>`+
+        `<div class="row"><span class="lb">旋转</span><input type="range" id="tpRotate" min="-180" max="180" value="${it.rotate||0}"><span class="lb" id="tpRotateV">${it.rotate||0}°</span></div>`+
+        `<div class="row"><span class="lb">字距</span><input type="range" id="tpSpace" min="-5" max="40" value="${Math.round((it.spacing!=null?it.spacing:0.1)*100)}"></div>`;
+      const live=()=>{ draw(); scheduleSave(); };
+      txtPanel.querySelector("#tpText").addEventListener("input",e=>{ it.text=e.target.value; live(); });
+      txtPanel.querySelector("#tpFont").addEventListener("change",e=>{ it.font=e.target.value; live(); });
+      txtPanel.querySelector("#tpWeight").addEventListener("change",e=>{ it.weight=+e.target.value; live(); });
+      txtPanel.querySelectorAll("#tpStyle button").forEach(b=>b.addEventListener("click",()=>{ it.style=b.dataset.st; draw(); scheduleSave(); renderTextPanel(); }));
+      txtPanel.querySelector("#tpColor").addEventListener("input",e=>{ it.color=e.target.value; live(); });
+      txtPanel.querySelector("#tpColor2").addEventListener("input",e=>{ it.color2=e.target.value; live(); });
+      const rv=txtPanel.querySelector("#tpRotateV");
+      txtPanel.querySelector("#tpRotate").addEventListener("input",e=>{ it.rotate=+e.target.value; rv.textContent=it.rotate+'°'; draw(); scheduleSave(); });
+      txtPanel.querySelector("#tpSpace").addEventListener("input",e=>{ it.spacing=(+e.target.value)/100; draw(); scheduleSave(); });
+    }
 
     // 依当前背景设置渲染舞台底
     function applyStageBg(){
@@ -2820,8 +2923,8 @@
         el.style.left=(it.x*CW())+"px"; el.style.top=(it.y*CH())+"px";
         el.style.width=(it.w*CW())+"px"; el.style.height=(it.h*CH())+"px";
         el.style.zIndex=it.z||1;
-        if(it.type==="cut"){ el.innerHTML=`<img src="${it.src}">`; }
-        else { el.style.color=it.color||bgTextColor(); el.style.fontSize=Math.max(10,Math.round(it.h*CH()*0.5))+"px"; el.textContent=it.text; }
+        if(it.type==="cut"){ el.innerHTML=`<img src="${it.src}">`; el.style.transform='rotate('+(it.rotate||0)+'deg)'; el.style.transformOrigin='center'; }
+        else { el.style.fontSize=Math.max(10,Math.round(it.h*CH()*0.5))+"px"; el.textContent=it.text; if(!it.color) it.color=bgTextColor(); applyTxtStyleToEl(el,it); }
         stage.appendChild(el);
       });
       applyClSel();
@@ -2830,12 +2933,14 @@
     // 选中框 + 手柄画在不裁切的 overlay 上，这样素材超出画布也能选中/拖拽/缩放
     function applyClSel(){
       overlay.innerHTML="";
+      if(typeof renderTextPanel==="function") renderTextPanel();
       if(selIdx<0||!n._collage.items[selIdx]) return;
       const it=n._collage.items[selIdx];
       const sel=document.createElement("div"); sel.className="cl-sel"; sel.dataset.i=selIdx;
       sel.style.left=(it.x*CW())+"px"; sel.style.top=(it.y*CH())+"px";
       sel.style.width=(it.w*CW())+"px"; sel.style.height=(it.h*CH())+"px";
-      sel.innerHTML=`<span class="h br"></span><span class="h del">×</span>`;
+      sel.style.transform="rotate("+(it.rotate||0)+"deg)"; sel.style.transformOrigin="center";
+      sel.innerHTML=`<span class="rotstem"></span><span class="h rot" title="旋转"><svg viewBox="0 0 24 24"><path d="M20 12 A8 8 0 1 1 12 4 M12 4 L16 4 M12 4 L12 8"/></svg></span><span class="h br"></span><span class="h del">×</span>`;
       overlay.appendChild(sel);
     }
     function syncSelBox(){
@@ -2843,6 +2948,7 @@
       const it=n._collage.items[selIdx]; if(!it) return;
       sel.style.left=(it.x*CW())+"px"; sel.style.top=(it.y*CH())+"px";
       sel.style.width=(it.w*CW())+"px"; sel.style.height=(it.h*CH())+"px";
+      sel.style.transform="rotate("+(it.rotate||0)+"deg)"; sel.style.transformOrigin="center";
     }
 
     // —— 托盘交互 ——
@@ -2907,8 +3013,18 @@
       // 1) 先看是否点到 overlay 上的手柄/选中框
       const handleDel=e.target.closest(".cl-sel .del");
       if(handleDel){ if(selIdx>=0){ n._collage.items.splice(selIdx,1); reindexZ(); selIdx=-1; draw(); scheduleSave(); } e.stopPropagation(); return; }
+      const handleRot=e.target.closest(".cl-sel .rot");
       const handleBr=e.target.closest(".cl-sel .br");
       const selBox=e.target.closest(".cl-sel");
+      if(handleRot && selIdx>=0){
+        const it=n._collage.items[selIdx];
+        // 以素材中心（画布像素坐标）为轴，记录起始指针角度与起始旋转值
+        const bb=box.getBoundingClientRect();
+        const cx=bb.left+(it.x+it.w/2)*CW(), cy=bb.top+(it.y+it.h/2)*CH();
+        const startAng=Math.atan2(e.clientY-cy, e.clientX-cx)*180/Math.PI;
+        drag={i:selIdx,mode:"rotate",cx,cy,startAng,orot:it.rotate||0};
+        selBox.classList.add("dragging"); box.setPointerCapture(e.pointerId); e.stopPropagation(); return;
+      }
       if(selBox && selIdx>=0){
         const it=n._collage.items[selIdx];
         const mode=handleBr?"resize":"move";
@@ -2926,6 +3042,19 @@
     });
     box.addEventListener("pointermove",(e)=>{
       if(!drag) return; const it=n._collage.items[drag.i]; if(!it) return;
+      if(drag.mode==="rotate"){
+        const ang=Math.atan2(e.clientY-drag.cy, e.clientX-drag.cx)*180/Math.PI;
+        let rot=Math.round(drag.orot + (ang-drag.startAng));
+        if(e.shiftKey) rot=Math.round(rot/15)*15; // 按住 Shift 每 15° 吸附
+        while(rot>180) rot-=360; while(rot<-180) rot+=360;
+        it.rotate=rot;
+        const el=stage.querySelector(`.cl-item[data-i="${drag.i}"]`);
+        if(el){ el.style.transform="rotate("+rot+"deg)"; el.style.transformOrigin="center"; }
+        const rs=mBody.querySelector("#tpRotate"), rv=mBody.querySelector("#tpRotateV");
+        if(rs) rs.value=rot; if(rv) rv.textContent=rot+"°";
+        syncSelBox();
+        return;
+      }
       const dx=(e.clientX-drag.sx)/CW(), dy=(e.clientY-drag.sy)/CH();
       if(drag.mode==="move"){
         it.x=Math.min(1.5,Math.max(-0.5,drag.ox+dx)); it.y=Math.min(1.5,Math.max(-0.5,drag.oy+dy));
@@ -2949,6 +3078,47 @@
      导出拼贴为 PNG：按模板比例画一张高清画布，绘制背景 + 各元素，
      超出画布的部分自然被裁切；触发浏览器下载。
      ============================================================ */
+  // 在导出画布上绘制一段花字文本（字体/花字/旋转/字距）
+  function drawCollageText(ctx, it, x, y, w, h){
+    const fs=Math.max(12, Math.round(h*0.5));
+    const cx=x+w/2, cy=y+h/2;
+    const c=it.color||"#ffffff", c2=it.color2||"#31476f", st=it.style||"plain", weight=it.weight||700;
+    const fam=fontCss(it.font||'hei');
+    const rot=(it.rotate||0)*Math.PI/180;
+    const spacing=(it.spacing!=null?it.spacing:0.1)*fs; // em -> px
+    const text=it.text||"";
+    ctx.save();
+    ctx.translate(cx,cy); ctx.rotate(rot);
+    ctx.font=`${weight} ${fs}px ${fam}`;
+    ctx.textAlign="center"; ctx.textBaseline="middle";
+    // 计算带字距的总宽，居中逐字绘制
+    const chars=[...text];
+    const widths=chars.map(ch=>ctx.measureText(ch).width);
+    const total=widths.reduce((a,b)=>a+b,0)+spacing*Math.max(0,chars.length-1);
+    let penX=-total/2;
+    function eachChar(fn){ let px=penX; for(let i=0;i<chars.length;i++){ fn(chars[i], px+widths[i]/2); px+=widths[i]+spacing; } }
+    if(st==="gradient"){
+      const g=ctx.createLinearGradient(0,-fs/2,0,fs/2); g.addColorStop(0,c); g.addColorStop(1,c2);
+      ctx.fillStyle=g; eachChar((ch,px)=>ctx.fillText(ch,px,0));
+    } else if(st==="hollow"){
+      ctx.lineWidth=Math.max(2,fs*0.05); ctx.strokeStyle=c;
+      eachChar((ch,px)=>ctx.strokeText(ch,px,0));
+    } else if(st==="outline"){
+      ctx.lineWidth=Math.max(2,fs*0.06); ctx.strokeStyle=c2; ctx.lineJoin="round";
+      eachChar((ch,px)=>ctx.strokeText(ch,px,0));
+      ctx.fillStyle=c; eachChar((ch,px)=>ctx.fillText(ch,px,0));
+    } else if(st==="shadow"){
+      ctx.fillStyle=c2; eachChar((ch,px)=>ctx.fillText(ch,px+fs*0.06,fs*0.06));
+      ctx.fillStyle=c;  eachChar((ch,px)=>ctx.fillText(ch,px,0));
+    } else if(st==="glow"){
+      ctx.shadowColor=c2; ctx.shadowBlur=fs*0.4; ctx.fillStyle=c;
+      eachChar((ch,px)=>ctx.fillText(ch,px,0));
+    } else {
+      ctx.shadowColor="rgba(0,0,0,.55)"; ctx.shadowBlur=4; ctx.shadowOffsetY=1; ctx.fillStyle=c;
+      eachChar((ch,px)=>ctx.fillText(ch,px,0));
+    }
+    ctx.restore();
+  }
   async function exportCollagePNG(n){
     const col=n._collage||{items:[]};
     const ratio=col.ratio||3.0;
@@ -2981,17 +3151,12 @@
           // object-fit:contain 居中
           const s=Math.min(w/im.width, h/im.height);
           const dw=im.width*s, dh=im.height*s;
-          ctx.drawImage(im, x+(w-dw)/2, y+(h-dh)/2, dw, dh);
+          const rot=(it.rotate||0)*Math.PI/180;
+          if(rot){ ctx.save(); ctx.translate(x+w/2,y+h/2); ctx.rotate(rot); ctx.drawImage(im,-dw/2,-dh/2,dw,dh); ctx.restore(); }
+          else ctx.drawImage(im, x+(w-dw)/2, y+(h-dh)/2, dw, dh);
         }catch(_){}
       }else{
-        const fs=Math.max(12, Math.round(h*0.5));
-        ctx.save();
-        ctx.font=`700 ${fs}px -apple-system,"PingFang SC","Microsoft YaHei",sans-serif`;
-        ctx.textAlign="center"; ctx.textBaseline="middle";
-        ctx.fillStyle=it.color||"#ffffff";
-        ctx.shadowColor="rgba(0,0,0,.55)"; ctx.shadowBlur=4; ctx.shadowOffsetY=1;
-        ctx.fillText(it.text||"", x+w/2, y+h/2);
-        ctx.restore();
+        drawCollageText(ctx, it, x, y, w, h);
       }
     }
     // 触发下载
@@ -3020,8 +3185,8 @@
     const items=[...(n._collage?n._collage.items:[])].sort((a,b)=>(a.z||1)-(b.z||1));
     for(const it of items){
       const style=`left:${(it.x*100).toFixed(2)}%;top:${(it.y*100).toFixed(2)}%;width:${(it.w*100).toFixed(2)}%;height:${(it.h*100).toFixed(2)}%;z-index:${it.z||1}`;
-      if(it.type==="cut"){ html+=`<div class="layer cl-p" style="${style}"><img src="${it.src}" style="width:100%;height:100%;object-fit:contain"></div>`; }
-      else { html+=`<div class="layer cl-p" style="${style};display:flex;align-items:center;justify-content:center;color:${it.color||'#fff'};font-weight:700;letter-spacing:.08em;text-align:center;text-shadow:0 1px 3px rgba(0,0,0,.55);font-size:clamp(8px,${(it.h*40).toFixed(1)}px,40px)">${escapeHTML(it.text)}</div>`; }
+      if(it.type==="cut"){ html+=`<div class="layer cl-p" style="${style};transform:rotate(${it.rotate||0}deg);transform-origin:center"><img src="${it.src}" style="width:100%;height:100%;object-fit:contain"></div>`; }
+      else { html+=`<div class="layer cl-p" style="${style};display:flex;align-items:center;justify-content:center;text-align:center;font-size:clamp(8px,${(it.h*40).toFixed(1)}px,40px);${txtStyleInline(it)}">${escapeHTML(it.text)}</div>`; }
     }
     stage.innerHTML=html;
     const w=stage.clientWidth; stage.style.height=Math.max(70,Math.round(w/ratio))+"px";
