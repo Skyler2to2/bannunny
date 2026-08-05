@@ -1,0 +1,3225 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>ˏ꒰ঌ Bannunny ໒꒱ྀིˎ</title>
+<style>
+  :root{
+    /* —— 中性灰 / 冷板岩工作站 · 低饱和低明度 —— */
+    --env:#5f635c;          /* 机身外框 / 桌面环境 */
+    --env-2:#4c4f49;        /* 外框阴影侧 */
+    --bezel:#7c8079;        /* 塑料/金属边框 */
+    --bezel-hi:#9aa096;     /* 边框高光棱 */
+    --plate:#9ea39a;        /* 图纸主面 */
+    --plate-2:#969b92;      /* 图纸暗侧 */
+    --ink:#2a2d29;          /* 墨字 / 深锚点 */
+    --ruler:#aeb2a8;        /* 标尺条底 */
+    --ruler-ink:#3a3e39;    /* 标尺刻度墨 */
+    --grid-fine:rgba(42,45,41,.10);
+    --grid-bold:rgba(42,45,41,.22);
+    --grid-axis:rgba(42,45,41,.40);
+
+    /* —— 节点：机器外壳 + 内凹屏 · 取自暮色天空的暗板岩蓝 —— */
+    --case:#7286a3;         /* 外壳主面 */
+    --case-2:#5c7090;       /* 外壳暗侧 */
+    --case-hi:#97aac4;      /* 外壳高光棱 */
+    --case-edge:#3f4f6a;    /* 外壳深缝 */
+    --crt:#323e54;          /* 内凹屏底 */
+    --crt-2:#2a3446;        /* 内凹屏暗侧 */
+    --phos:#d3dbe7;         /* 屏上淡"荧光"冷板岩蓝字 */
+    --phos-dim:#9aa6ba;     /* 屏上次级蓝灰 */
+    --wire:rgba(38,50,74,.62);
+    --proof:#8a4b46;        /* 低饱和暗红 · 专用工艺标注线（出血/裁切警示）*/
+    --proof-dim:rgba(138,75,70,.5);
+    --mono:"SFMono-Regular",ui-monospace,"JetBrains Mono","Roboto Mono",Menlo,Consolas,monospace;
+    --rw:26px;              /* 标尺宽度 */
+    --dock:172px;           /* 左侧档案坞宽度 */
+    --top:42px;             /* 顶部标题栏高度 */
+    --rail:58px;            /* 右侧操作栏宽度 */
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%;margin:0}
+  body{
+    font-family:var(--mono);color:var(--ink);
+    background:var(--plate);
+    overflow:hidden;-webkit-font-smoothing:antialiased;
+    /* 全局禁止文本选择：整个工作站是操作界面，选中文字只会干扰拖拽/连线 */
+    user-select:none;-webkit-user-select:none;-moz-user-select:none;
+    cursor:default;
+  }
+  /* 仅真正可编辑的字段恢复文本选择/光标 */
+  [contenteditable="true"],input,textarea,
+  .p-anno .line,.p-anno .tr,.p-note-edit,.m-text .ed{
+    user-select:text;-webkit-user-select:text;-moz-user-select:text;cursor:text;
+  }
+
+  /* —— 应用外壳：满铺视口，去掉最外层深/浅灰显示器边框 —— */
+  #shell{
+    position:fixed;inset:0;border-radius:0;
+    background:var(--plate);padding:0;
+  }
+  #screen{
+    position:absolute;inset:0;border-radius:0;overflow:hidden;
+    background:var(--plate);
+    cursor:grab;
+  }
+  #screen.panning{cursor:grabbing}
+
+  #viewport{position:absolute;inset:0;overflow:hidden}
+  #world{position:absolute;top:0;left:0;transform-origin:0 0;width:0;height:0}
+
+  #grid{
+    position:absolute;inset:-4000px;pointer-events:none;
+    background-image:
+      linear-gradient(var(--grid-bold) 1px, transparent 1px),
+      linear-gradient(90deg, var(--grid-bold) 1px, transparent 1px),
+      linear-gradient(var(--grid-fine) 1px, transparent 1px),
+      linear-gradient(90deg, var(--grid-fine) 1px, transparent 1px);
+    background-color:transparent;
+  }
+
+  /* ========================================================= */
+  /* ===========  连接层 · MAGNETIC FIELD LINES  ============ */
+  /* ========================================================= */
+  #wires{position:absolute;top:0;left:0;overflow:visible;z-index:1;pointer-events:none}
+  /* 每条场线一组：命中区(hit) + 场线本体(field) + 流动虚线(flow) */
+  #wires .hit{fill:none;stroke:transparent;stroke-width:14;pointer-events:stroke;cursor:pointer}
+  #wires .field{fill:none;stroke:var(--wire);stroke-width:1.4;stroke-dasharray:3 4;
+    transition:stroke .16s ease, stroke-width .16s ease, opacity .16s ease}
+  /* 叠一层缓慢流动的亮点，表现"磁力流向" */
+  #wires .flow{fill:none;stroke:var(--phos);stroke-width:1.2;opacity:.28;
+    stroke-dasharray:1 13;stroke-linecap:round;
+    animation:fieldFlow 2.6s linear infinite;transition:opacity .16s ease}
+  @keyframes fieldFlow{to{stroke-dashoffset:-28}}
+  /* 端点：起点方形插座、终点圆形磁极 */
+  #wires .a-src{fill:var(--case-2);stroke:var(--case-edge);stroke-width:1}
+  #wires .a-dst{fill:var(--case-2);stroke:var(--case-edge);stroke-width:1}
+  #wires .a-core{fill:var(--phos);opacity:.85}
+  /* hover 态 */
+  #wires .g.hover .field{stroke:var(--phos-dim);stroke-width:1.8;opacity:1}
+  #wires .g.hover .flow{opacity:.6}
+  #wires .g.hover .a-core{fill:#e6ecf5}
+  /* 选中态 */
+  #wires .g.sel .field{stroke:var(--phos);stroke-width:2;stroke-dasharray:none;opacity:1;
+    filter:drop-shadow(0 0 3px rgba(195,204,218,.5))}
+  #wires .g.sel .flow{opacity:.85;stroke-dasharray:2 10;animation-duration:1.6s}
+  #wires .g.sel .a-core{fill:#eef2f8;r:2.4}
+
+  /* —— 场线示意图标（HUD 图例用）—— */
+  .field-ico{width:26px;height:12px;display:inline-block;vertical-align:middle}
+  .field-ico path{fill:none;stroke:var(--wire);stroke-width:1.4;stroke-dasharray:3 3}
+  .field-ico circle{fill:var(--phos)}
+
+  /* —— 环境质感层（固定在屏幕上，不随内容缩放）—— */
+  #grain{position:absolute;inset:0;pointer-events:none;mix-blend-mode:multiply;opacity:.30;z-index:6}
+  #scan{
+    position:absolute;inset:0;pointer-events:none;opacity:.14;mix-blend-mode:multiply;z-index:6;
+    background:repeating-linear-gradient(0deg, rgba(0,0,0,.55) 0 1px, transparent 1px 3px);
+  }
+  #vign{
+    position:absolute;inset:0;pointer-events:none;z-index:6;
+    background:
+      radial-gradient(120% 100% at 50% 42%, rgba(255,255,255,.10), transparent 46%),
+      radial-gradient(130% 120% at 50% 50%, transparent 58%, rgba(0,0,0,.34) 100%);
+    box-shadow:inset 0 0 120px rgba(0,0,0,.28);
+  }
+
+  /* —— 标尺 —— */
+  #rulerTop,#rulerLeft{
+    position:absolute;background:linear-gradient(180deg,var(--ruler),#a0a49a);
+    color:var(--ruler-ink);z-index:5;overflow:hidden;pointer-events:none;
+    box-shadow:inset 0 -1px 0 rgba(0,0,0,.25);
+  }
+  #rulerTop{top:var(--top);left:calc(var(--dock) + var(--rw));right:var(--rail);height:var(--rw)}
+  #rulerLeft{top:calc(var(--top) + var(--rw));left:var(--dock);bottom:0;width:var(--rw);
+    background:linear-gradient(90deg,var(--ruler),#a0a49a);
+    box-shadow:inset -1px 0 0 rgba(0,0,0,.25);
+  }
+  #corner{position:absolute;top:var(--top);left:var(--dock);width:var(--rw);height:var(--rw);
+    background:linear-gradient(135deg,var(--bezel-hi),var(--bezel));z-index:6;
+    box-shadow:inset -1px -1px 0 rgba(0,0,0,.25);
+  }
+  .tick{position:absolute;background:var(--ruler-ink)}
+  .tickLabel{position:absolute;font-size:9px;letter-spacing:.04em;color:var(--ruler-ink)}
+  #rulerTop .tick{bottom:0;width:1px}
+  #rulerTop .tick.major{height:10px}
+  #rulerTop .tick.minor{height:5px;opacity:.7}
+  #rulerTop .tickLabel{top:2px;transform:translateX(3px)}
+  #rulerLeft .tick{right:0;height:1px}
+  #rulerLeft .tick.major{width:10px}
+  #rulerLeft .tick.minor{width:5px;opacity:.7}
+  #rulerLeft .tickLabel{left:2px;transform:translateY(2px);writing-mode:vertical-rl}
+
+  /* ========================================================= */
+  /* ===============  卡片容器系统 · NODE  =================== */
+  /* ========================================================= */
+  .node{
+    position:absolute;z-index:2;width:240px;
+    border-radius:8px;padding:7px;
+    background:
+      linear-gradient(158deg,var(--case-hi),var(--case) 26%,var(--case-2));
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,.28),
+      inset 0 -2px 5px rgba(0,0,0,.34),
+      inset 0 0 0 1px rgba(0,0,0,.30),
+      0 12px 26px rgba(0,0,0,.34),
+      0 3px 7px rgba(0,0,0,.22);
+    cursor:grab;user-select:none;touch-action:none;
+    transition:box-shadow .16s ease, transform .16s ease;
+  }
+  .node.dragging{cursor:grabbing;box-shadow:
+      inset 0 1px 0 rgba(255,255,255,.30),
+      inset 0 0 0 1px rgba(0,0,0,.34),
+      0 22px 44px rgba(0,0,0,.44),
+      0 6px 14px rgba(0,0,0,.30);
+    transform:scale(1.012)}
+  .node.active{box-shadow:
+      inset 0 1px 0 rgba(255,255,255,.32),
+      inset 0 0 0 1px rgba(0,0,0,.30),
+      0 0 0 1.5px rgba(255,255,255,.28),
+      0 16px 34px rgba(0,0,0,.40)}
+  /* 选中场线时，其连接的两端卡片白色边框高亮 */
+  .node.linked{box-shadow:
+      inset 0 1px 0 rgba(255,255,255,.34),
+      inset 0 0 0 1px rgba(0,0,0,.30),
+      0 0 0 2px rgba(255,255,255,.9),
+      0 0 14px rgba(230,236,245,.5),
+      0 16px 34px rgba(0,0,0,.42)}
+  /* 主选（对齐/层级基准）：更实的白框 */
+  .node.primary{box-shadow:
+      inset 0 1px 0 rgba(255,255,255,.34),
+      inset 0 0 0 1px rgba(0,0,0,.30),
+      0 0 0 2px rgba(255,255,255,.95),
+      0 0 12px rgba(230,236,245,.55),
+      0 16px 34px rgba(0,0,0,.42)}
+  /* 锁定：右上角挂锁角标 + 禁用光标 */
+  .node.locked{cursor:not-allowed}
+  .node .lockbadge{display:none;position:absolute;top:5px;right:24px;z-index:6;
+    width:15px;height:15px;color:var(--phos);opacity:.92;
+    filter:drop-shadow(0 0 3px rgba(198,208,224,.5))}
+  .node.locked .lockbadge{display:block}
+  .node .lockbadge svg{width:15px;height:15px}
+  .node .lockbadge svg *{fill:none;stroke:currentColor;stroke-width:1.6;
+    stroke-linecap:round;stroke-linejoin:round;vector-effect:non-scaling-stroke}
+  .node.locked .screen-in{opacity:.82}
+
+  /* 外壳四角螺丝（装饰件） */
+  .node .screw{position:absolute;width:7px;height:7px;border-radius:50%;
+    background:radial-gradient(circle at 35% 30%, #b3b7ad, #6c706a 60%, #43473f);
+    box-shadow:inset 0 0 0 .5px rgba(0,0,0,.4), 0 1px 1px rgba(0,0,0,.3);z-index:4}
+  .node .screw::after{content:"";position:absolute;inset:1.5px;border-radius:50%;
+    background:linear-gradient(45deg,transparent 42%,rgba(0,0,0,.45) 44% 56%,transparent 58%)}
+  .node .screw.tl{left:5px;top:5px}.node .screw.tr{right:5px;top:5px}
+  .node .screw.bl{left:5px;bottom:5px}.node .screw.br{right:5px;bottom:5px}
+
+  /* 型号铭牌条 */
+  .node .head{
+    display:flex;align-items:center;gap:7px;
+    padding:5px 10px 6px;margin:2px 6px 6px;position:relative;
+    border-radius:3px;
+    background:linear-gradient(180deg, rgba(0,0,0,.14), rgba(255,255,255,.06));
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.16), inset 0 -1px 2px rgba(0,0,0,.28);
+  }
+  .node .led{width:6px;height:6px;border-radius:50%;flex:0 0 auto;
+    background:radial-gradient(circle at 35% 30%, #d6dccf, #9aa093 60%, #61665c);
+    box-shadow:0 0 5px rgba(214,220,207,.5), inset 0 0 0 .5px rgba(0,0,0,.3)}
+  .node .idx{font-size:9px;letter-spacing:.14em;color:var(--ruler-ink);
+    padding:1px 4px;border-radius:2px;background:rgba(0,0,0,.12);
+    box-shadow:inset 0 0 0 .5px rgba(0,0,0,.25)}
+  .node .name{font-size:12px;font-weight:600;letter-spacing:.05em}
+  .node .meta{margin-left:auto;font-size:8.5px;letter-spacing:.12em;color:var(--ruler-ink);
+    text-transform:uppercase;opacity:.85}
+
+  /* 内凹 CRT 屏体 */
+  .node .screen-in{
+    position:relative;margin:0 6px;border-radius:5px;overflow:hidden;
+    background:linear-gradient(160deg,var(--crt),var(--crt-2));
+    box-shadow:
+      inset 0 0 0 1px rgba(0,0,0,.6),
+      inset 0 2px 10px rgba(0,0,0,.55),
+      inset 0 0 26px rgba(0,0,0,.4);
+    color:var(--phos);
+  }
+  /* 屏内扫描线 + 弧面高光 */
+  .node .screen-in::before{content:"";position:absolute;inset:0;pointer-events:none;z-index:3;
+    background:repeating-linear-gradient(0deg, rgba(0,0,0,.30) 0 1px, transparent 1px 3px);opacity:.5}
+  .node .screen-in::after{content:"";position:absolute;inset:0;pointer-events:none;z-index:3;
+    background:radial-gradient(120% 90% at 50% 8%, rgba(255,255,255,.10), transparent 44%)}
+  .node .body{position:relative;z-index:2;padding:11px}
+  .node .foot{margin:6px 8px 3px;font-size:8.5px;letter-spacing:.12em;color:var(--ruler-ink);
+    text-transform:uppercase;opacity:.8;display:flex;justify-content:space-between}
+
+  /* 侧边端口（装饰件 + 连线锚点视觉） */
+  .node .port{position:absolute;top:50%;width:11px;height:16px;transform:translateY(-50%);
+    border-radius:2px;background:linear-gradient(180deg,var(--case-2),var(--case-edge));
+    box-shadow:inset 0 0 0 .5px rgba(0,0,0,.5), inset 0 1px 0 rgba(255,255,255,.12);z-index:5;
+    pointer-events:auto;transition:transform .12s ease, box-shadow .12s ease}
+  .node .port::after{content:"";position:absolute;inset:3px 2px;border-radius:1px;
+    background:radial-gradient(circle at 50% 40%, #2a2d29, #17190f)}
+  /* 加大命中区，便于抓取 */
+  .node .port::before{content:"";position:absolute;inset:-7px;border-radius:5px}
+  .node .port.in{left:-5px}.node .port.out{right:-5px;cursor:crosshair}
+  /* 悬停在卡片上时端口点亮，暗示可从 OUT 口拉出连线 */
+  .node:hover .port.out{box-shadow:inset 0 0 0 .5px rgba(0,0,0,.5),0 0 7px rgba(198,208,224,.5)}
+  .node .port.out:hover{transform:translateY(-50%) scale(1.4);
+    box-shadow:0 0 0 1px var(--phos),0 0 12px rgba(198,208,224,.8)}
+  /* 拉线过程：全局十字光标 + 目标卡片高亮 + 源端口点亮 */
+  #screen.wiring,#screen.wiring .node,#screen.wiring .node *{cursor:crosshair !important}
+  .node.wire-target{box-shadow:0 0 0 2px var(--phos),0 0 16px rgba(198,208,224,.62) !important}
+  .node.wire-source .port.out{transform:translateY(-50%) scale(1.45);
+    box-shadow:0 0 0 1px var(--phos),0 0 14px rgba(198,208,224,.85)}
+  /* 拖拽时的临时连线（ghost）*/
+  #wires .ghost{fill:none;stroke:var(--phos);stroke-width:2.4;stroke-dasharray:6 5;
+    opacity:1;stroke-linecap:round;filter:drop-shadow(0 0 5px rgba(195,204,218,.8));
+    animation:fieldFlow .9s linear infinite}
+  /* 拉线时把连线层抬到卡片之上，保证 ghost 线在卡片上方清晰可见 */
+  #screen.wiring #wires{z-index:6}
+
+  /* ========================================================= */
+  /* ===========  内容预览类型 · NODE CONTENT  ============== */
+  /* ========================================================= */
+  /* 通用屏内小标签 / 手写批注 */
+  .p-tag{position:absolute;font-size:7px;letter-spacing:.1em;color:var(--phos-dim);
+    text-transform:uppercase;opacity:.8;z-index:4}
+  .p-hand{position:absolute;font-family:"Bradley Hand","Segoe Print","Comic Sans MS",cursive;
+    font-size:9px;letter-spacing:.02em;color:var(--phos);opacity:.82;z-index:4;
+    transform:rotate(-4deg)}
+
+  /* —— 1 · 明星图 / STARS：多格图片网格 —— */
+  .p-stars{display:grid;grid-template-columns:repeat(3,1fr);grid-auto-rows:38px;gap:5px}
+  .p-stars .cell{border-radius:3px;position:relative;overflow:hidden;
+    background:linear-gradient(180deg,#3d4658,#2b3243);box-shadow:inset 0 0 0 .5px rgba(0,0,0,.55)}
+  .p-stars .cell::before{content:"";position:absolute;left:50%;top:6px;width:11px;height:11px;
+    transform:translateX(-50%);border-radius:50%;background:var(--phos-dim);opacity:.6}
+  .p-stars .cell::after{content:"";position:absolute;left:50%;bottom:-7px;width:20px;height:26px;
+    transform:translateX(-50%);border-radius:10px 10px 0 0;
+    background:linear-gradient(180deg,var(--phos-dim),transparent);opacity:.55}
+  .p-stars .cell.sel{box-shadow:inset 0 0 0 1.5px var(--phos),0 0 6px rgba(195,204,218,.4)}
+  .p-stars .cell.sel::corner{}
+  .p-stars .count{position:absolute;right:6px;bottom:5px;font-size:7px;letter-spacing:.08em;
+    color:var(--phos);background:rgba(0,0,0,.4);padding:1px 4px;border-radius:2px;z-index:4}
+
+  /* —— 2 · 参考图 / REFERENCE：单张竖图 + 右侧取色条 —— */
+  .p-ref{display:flex;gap:6px;height:118px}
+  .p-ref .shot{flex:1;border-radius:3px;position:relative;overflow:hidden;
+    box-shadow:inset 0 0 0 .5px rgba(0,0,0,.55);
+    background:
+      radial-gradient(120% 70% at 50% 0%, rgba(148,166,196,.5), transparent 55%),
+      radial-gradient(90% 60% at 40% 100%, rgba(90,110,138,.55), transparent 60%),
+      linear-gradient(180deg,#3a445a,#242c3d)}
+  .p-ref .shot::after{content:"";position:absolute;left:26%;bottom:0;width:48%;height:42%;
+    background:linear-gradient(180deg,rgba(30,38,54,.1),rgba(20,26,40,.8));
+    border-radius:40% 40% 0 0}
+  .p-ref .pick{width:20px;display:flex;flex-direction:column;border-radius:3px;overflow:hidden;
+    box-shadow:inset 0 0 0 .5px rgba(0,0,0,.55)}
+  .p-ref .pick span{flex:1;position:relative}
+  .p-ref .pick .dropper{position:absolute;right:-3px;width:0;height:0;
+    border-top:4px solid transparent;border-bottom:4px solid transparent;border-right:5px solid var(--phos)}
+
+  /* —— 3 · 抠图 / CUTOUT：透明描图纸 + 轮廓 + 手写标注 —— */
+  .p-cutout{height:118px;border-radius:3px;position:relative;overflow:hidden;
+    background-color:#2b3141;
+    background-image:
+      linear-gradient(45deg, rgba(255,255,255,.055) 25%, transparent 25% 75%, rgba(255,255,255,.055) 75%),
+      linear-gradient(45deg, rgba(255,255,255,.055) 25%, transparent 25% 75%, rgba(255,255,255,.055) 75%);
+    background-size:12px 12px;background-position:0 0, 6px 6px;
+    box-shadow:inset 0 0 0 .5px rgba(0,0,0,.55)}
+  /* 描图纸半透覆层 */
+  .p-cutout::before{content:"";position:absolute;inset:0;
+    background:linear-gradient(135deg, rgba(198,208,224,.10), rgba(198,208,224,.02));
+    box-shadow:inset 0 0 24px rgba(200,210,226,.08)}
+  /* 人物轮廓（虚线抠像路径） */
+  .p-cutout .fig{position:absolute;left:50%;top:12px;width:46px;height:82px;
+    transform:translateX(-50%);border-radius:23px 23px 9px 9px;
+    background:linear-gradient(180deg,rgba(148,166,196,.35),rgba(60,76,102,.1));
+    outline:1.4px dashed rgba(198,208,224,.75);outline-offset:2px}
+  .p-cutout .fig::before{content:"";position:absolute;left:50%;top:-4px;width:22px;height:22px;
+    transform:translateX(-50%);border-radius:50%;
+    background:linear-gradient(180deg,rgba(148,166,196,.4),rgba(60,76,102,.15))}
+
+  /* —— 4 · 色板 / PALETTE：色块行 + 每行 hex —— */
+  .p-pal{display:flex;flex-direction:column;gap:4px}
+  .p-pal .row{display:flex;align-items:center;gap:7px;height:16px}
+  .p-pal .chip{width:26px;height:100%;border-radius:2px;flex:0 0 auto;
+    box-shadow:inset 0 0 0 .5px rgba(0,0,0,.5)}
+  .p-pal .hex{font-size:8px;letter-spacing:.08em;color:var(--phos);opacity:.9}
+  .p-pal .use{margin-left:auto;font-size:6.5px;letter-spacing:.06em;color:var(--phos-dim);text-transform:uppercase}
+
+  /* —— 5 · 文案 / ANNOTATION：正文 + 翻译 + 字体参数 —— */
+  .p-anno{display:flex;flex-direction:column;gap:7px}
+  .p-anno .line{font-size:10px;letter-spacing:.04em;color:var(--phos);line-height:1.35}
+  .p-anno .tr{font-size:8px;letter-spacing:.03em;color:var(--phos-dim);font-style:italic}
+  .p-anno .params{display:flex;gap:5px;margin-top:2px;flex-wrap:wrap}
+  .p-anno .params b{font-size:6.5px;font-weight:500;letter-spacing:.06em;color:var(--phos-dim);
+    text-transform:uppercase;padding:1px 5px;border-radius:2px;
+    background:rgba(0,0,0,.28);box-shadow:inset 0 0 0 .5px rgba(198,208,224,.22)}
+
+  /* —— 6 · 纹理 / TEXTURE：撕纸 + 网格纸 + 星点拼贴 —— */
+  .p-tex{position:relative;height:104px;border-radius:3px;overflow:hidden;
+    background:#242c3a;box-shadow:inset 0 0 0 .5px rgba(0,0,0,.55)}
+  .p-tex .patch{position:absolute;box-shadow:0 3px 7px rgba(0,0,0,.4)}
+  /* 撕纸样片 */
+  .p-tex .torn{left:8px;top:10px;width:82px;height:52px;transform:rotate(-5deg);
+    background:linear-gradient(180deg,#5a6c8a,#3f4d66);
+    clip-path:polygon(0 6%,12% 0,30% 7%,52% 1%,74% 8%,92% 2%,100% 9%,97% 88%,88% 100%,64% 93%,40% 100%,18% 92%,4% 98%);}
+  /* 网格纸 */
+  .p-tex .grid{right:10px;top:6px;width:74px;height:56px;transform:rotate(4deg);
+    background-color:#eef1f6;
+    background-image:
+      linear-gradient(rgba(60,76,102,.5) 1px,transparent 1px),
+      linear-gradient(90deg,rgba(60,76,102,.5) 1px,transparent 1px);
+    background-size:9px 9px}
+  /* 星点底纹 */
+  .p-tex .stars{left:26px;bottom:8px;width:96px;height:40px;transform:rotate(-2deg);
+    background-color:#2f3a4e;
+    background-image:
+      radial-gradient(circle at 7px 7px, rgba(198,208,224,.85) 0 1.3px, transparent 2px),
+      radial-gradient(circle at 20px 18px, rgba(198,208,224,.55) 0 1px, transparent 1.8px),
+      radial-gradient(circle at 34px 9px, rgba(198,208,224,.7) 0 1.2px, transparent 1.9px);
+    background-size:26px 24px,26px 24px,26px 24px}
+
+  /* —— 7 · 模板 / TEMPLATE：出血 + 安全区 + 尺寸标注 —— */
+  .p-tpl{position:relative;height:118px;border-radius:3px;
+    background:linear-gradient(180deg,#2e3648,#242c3b);
+    box-shadow:inset 0 0 0 .5px rgba(0,0,0,.55)}
+  /* 出血框 · 低饱和暗红工艺标注线 */
+  .p-tpl .bleed{position:absolute;inset:12px;outline:1px dashed var(--proof)}
+  .p-tpl .bleed::after{content:"BLEED";position:absolute;right:1px;top:-8px;
+    font-size:5.5px;letter-spacing:.1em;color:var(--proof)}
+  /* 裁切框 */
+  .p-tpl .trim{position:absolute;inset:20px;outline:1px solid rgba(198,208,224,.85)}
+  /* 安全区 */
+  .p-tpl .safe{position:absolute;inset:28px;outline:1px dashed rgba(148,166,196,.7)}
+  .p-tpl .cut{position:absolute;width:8px;height:8px;opacity:.8}
+  .p-tpl .cut::before,.p-tpl .cut::after{content:"";position:absolute;background:var(--phos)}
+  .p-tpl .cut::before{left:3.5px;top:0;width:1px;height:8px}
+  .p-tpl .cut::after{left:0;top:3.5px;width:8px;height:1px}
+  .p-tpl .cut.tl{left:16px;top:16px}.p-tpl .cut.tr{right:16px;top:16px}
+  .p-tpl .cut.bl{left:16px;bottom:16px}.p-tpl .cut.br{right:16px;bottom:16px}
+  /* 尺寸标注 */
+  .p-tpl .dim{position:absolute;font-size:6.5px;letter-spacing:.06em;color:var(--phos-dim);text-transform:uppercase}
+  .p-tpl .dim.top{top:3px;left:50%;transform:translateX(-50%)}
+  .p-tpl .dim.bot{bottom:3px;left:50%;transform:translateX(-50%)}
+  .p-tpl .dim.left{left:2px;top:50%;transform:translateY(-50%) rotate(180deg);writing-mode:vertical-rl}
+  .p-tpl .dim.mid{top:50%;left:50%;transform:translate(-50%,-50%);font-size:8px;color:var(--phos);letter-spacing:.1em}
+  .p-tpl .spec{position:absolute;right:3px;bottom:3px;font-size:6px;letter-spacing:.06em;
+    color:var(--phos-dim);text-align:right;line-height:1.5}
+
+  /* —— 8 · 输出 / OUTPUT：手幅拼贴成品预览 —— */
+  .p-out{position:relative;height:118px;border-radius:3px;overflow:hidden;
+    display:flex;align-items:center;justify-content:center;
+    background:
+      linear-gradient(115deg, rgba(90,108,138,.35), rgba(36,44,60,.6)),
+      repeating-linear-gradient(90deg, rgba(198,208,224,.05) 0 1px, transparent 1px 15px),
+      linear-gradient(180deg,#33405a,#232b3b);
+    box-shadow:inset 0 0 0 .5px rgba(0,0,0,.55), inset 0 0 0 1px rgba(198,208,224,.25)}
+  /* 拼贴碎片 */
+  .p-out .frag{position:absolute;border-radius:2px;box-shadow:0 2px 5px rgba(0,0,0,.4)}
+  .p-out .frag.a{left:10px;top:14px;width:40px;height:52px;transform:rotate(-6deg);
+    background:linear-gradient(180deg,#7286a3,#4a5a76)}
+  .p-out .frag.b{right:14px;top:20px;width:34px;height:34px;transform:rotate(8deg);
+    background:radial-gradient(circle at 40% 35%, #cbd3e0, #7286a3 70%)}
+  .p-out .frag.c{right:26px;bottom:14px;width:44px;height:26px;transform:rotate(-3deg);
+    background:repeating-linear-gradient(45deg,#5a6c8a 0 4px,#3f4d66 4px 8px)}
+  .p-out .slogan{position:relative;z-index:3;color:var(--phos);font-weight:700;
+    letter-spacing:.2em;font-size:15px;text-shadow:0 1px 2px rgba(0,0,0,.5)}
+  .p-out .reg{position:absolute;width:9px;height:9px;opacity:.55;z-index:3}
+  .p-out .reg::before,.p-out .reg::after{content:"";position:absolute;background:var(--phos-dim)}
+  .p-out .reg::before{left:4px;top:0;width:1px;height:9px}
+  .p-out .reg::after{left:0;top:4px;width:9px;height:1px}
+  .p-out .reg.tl{left:6px;top:6px}.p-out .reg.tr{right:6px;top:6px}
+  .p-out .reg.bl{left:6px;bottom:6px}.p-out .reg.br{right:6px;bottom:6px}
+
+  /* —— 顶栏 / HUD —— */
+  #plateTag{position:absolute;left:calc(var(--dock) + var(--rw) + 12px);top:calc(var(--top) + var(--rw) + 10px);z-index:7;
+    font-size:9px;letter-spacing:.22em;color:var(--ruler-ink);opacity:.6;text-transform:uppercase;pointer-events:none}
+  #hud{position:absolute;left:calc(var(--dock) + var(--rw) + 12px);bottom:12px;z-index:7;
+    display:flex;gap:14px;align-items:center;
+    font-size:10px;letter-spacing:.14em;color:var(--ruler-ink);text-transform:uppercase;
+    opacity:.85;pointer-events:none;
+  }
+  #hud .k{display:inline-flex;align-items:center;gap:6px}
+  #hud .line{width:22px;height:0;border-top:1.4px dashed var(--wire)}
+  #controls{position:absolute;right:calc(var(--rail) + 12px);bottom:12px;z-index:7;display:flex;gap:4px;
+    padding:4px;border-radius:6px;background:rgba(126,130,121,.72);
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.2),0 4px 12px rgba(0,0,0,.3);backdrop-filter:blur(4px);
+  }
+  #controls button{width:26px;height:26px;border:0;border-radius:4px;cursor:pointer;
+    background:linear-gradient(180deg,#9aa096,#7c8079);color:var(--ink);font-family:var(--mono);
+    font-size:13px;box-shadow:inset 0 1px 0 rgba(255,255,255,.25),0 1px 2px rgba(0,0,0,.3)}
+  #controls button:active{background:#6f726b}
+  #controls .zoom{min-width:46px;display:grid;place-items:center;font-size:10px;letter-spacing:.05em;
+    color:var(--ruler-ink);background:transparent;box-shadow:none;cursor:default}
+  #controls .reset{width:auto;padding:0 9px;font-size:9px;letter-spacing:.1em}
+
+  /* ========================================================= */
+  /* =========  统一左侧档案坞 · LEFT ARCHIVE DOCK  ========= */
+  /* ========================================================= */
+  #dock{position:absolute;left:0;top:var(--top);bottom:0;width:var(--dock);z-index:8;
+    display:flex;flex-direction:column;
+    background:linear-gradient(180deg,var(--case) 0%,var(--case-2) 100%);
+    box-shadow:
+      inset -1px 0 0 rgba(0,0,0,.4),
+      inset 1px 0 0 rgba(255,255,255,.14),
+      4px 0 18px rgba(0,0,0,.34);
+  }
+
+  /* 坞头：徽标 + 标题 */
+  .dk-head{display:flex;align-items:center;gap:9px;padding:13px 12px 12px;
+    box-shadow:inset 0 -1px 0 rgba(0,0,0,.34), 0 1px 0 rgba(255,255,255,.10)}
+  .dk-logo{width:26px;height:26px;flex:0 0 auto;color:var(--phos)}
+  .dk-logo svg{width:26px;height:26px}
+  .dk-logo svg *{fill:none;stroke:currentColor;stroke-width:1.3;
+    stroke-linecap:round;stroke-linejoin:round;vector-effect:non-scaling-stroke}
+  .dk-title{display:flex;flex-direction:column;line-height:1.3}
+  .dk-title .l1{display:block;font-size:8.5px;font-weight:600;letter-spacing:.16em;color:var(--phos);text-transform:uppercase}
+  .dk-title .l2{display:block;font-size:8.5px;letter-spacing:.16em;color:var(--phos-dim);text-transform:uppercase;margin-top:3px}
+
+  /* —— 工具区（横排：图标 + 文字）—— */
+  #toolbar{display:flex;flex-direction:column;gap:2px;padding:14px 10px 12px}
+  .tool{position:relative;display:flex;align-items:center;gap:11px;
+    padding:8px 10px;border:0;border-radius:6px;cursor:pointer;text-align:left;
+    background:transparent;color:var(--phos-dim);font-family:var(--mono);
+    transition:background .14s ease, color .14s ease, box-shadow .14s ease;}
+  .tool svg{width:19px;height:19px;flex:0 0 auto;display:block}
+  .tool svg *{fill:none;stroke:currentColor;stroke-width:1.5;
+    stroke-linecap:round;stroke-linejoin:round;vector-effect:non-scaling-stroke}
+  .tool .lbl{font-size:9.5px;letter-spacing:.13em;text-transform:uppercase}
+  .tool:hover{color:var(--phos);
+    background:linear-gradient(180deg, rgba(255,255,255,.05), rgba(0,0,0,.08));
+    box-shadow:inset 0 0 0 .5px rgba(198,208,224,.18)}
+  /* 选中态：整行内凹发光屏 */
+  .tool.active{color:var(--phos);
+    background:linear-gradient(160deg,var(--crt),var(--crt-2));
+    box-shadow:
+      inset 0 0 0 1px rgba(0,0,0,.6),
+      inset 0 2px 8px rgba(0,0,0,.5),
+      0 0 0 1px rgba(198,208,224,.28);}
+  .tool.active svg *{filter:drop-shadow(0 0 3px rgba(198,208,224,.55))}
+  .tool.active::before{content:"";position:absolute;left:-1px;top:50%;transform:translateY(-50%);
+    width:2px;height:60%;border-radius:1px;background:var(--phos);
+    box-shadow:0 0 5px rgba(198,208,224,.7)}
+  .tool.sep{margin-top:6px;padding-top:12px}
+  .tool.sep::after{content:"";position:absolute;left:10px;right:10px;top:3px;height:1px;
+    background:rgba(0,0,0,.3);box-shadow:0 1px 0 rgba(255,255,255,.10)}
+
+  /* —— 图层区（占据坞底部，可滚动）—— */
+  #layers{margin-top:auto;display:flex;flex-direction:column;min-height:0;
+    box-shadow:inset 0 1px 0 rgba(0,0,0,.34), 0 -1px 0 rgba(255,255,255,.08)}
+  #layers .lp-head{display:flex;align-items:center;gap:7px;padding:10px 12px 8px}
+  #layers .lp-head .ttl{font-size:8px;font-weight:600;letter-spacing:.14em;
+    color:var(--phos-dim);text-transform:uppercase}
+  #layers .lp-head .add{margin-left:auto;width:16px;height:16px;border:0;border-radius:3px;cursor:pointer;
+    background:transparent;color:var(--phos-dim);font-family:var(--mono);font-size:13px;line-height:1;
+    display:grid;place-items:center;transition:color .12s ease, background .12s ease}
+  #layers .lp-head .add:hover{color:var(--phos);background:rgba(198,208,224,.12)}
+
+  #layers .lp-scroll{flex:1;min-height:60px;overflow-y:auto;overflow-x:hidden;padding:0 6px}
+  #layers .lp-scroll::-webkit-scrollbar{width:7px}
+  #layers .lp-scroll::-webkit-scrollbar-track{background:transparent}
+  #layers .lp-scroll::-webkit-scrollbar-thumb{border-radius:4px;
+    background:rgba(198,208,224,.24);border:2px solid transparent;background-clip:padding-box}
+  #layers .lp-scroll::-webkit-scrollbar-thumb:hover{background:rgba(198,208,224,.4);background-clip:padding-box}
+
+  .lp-row{display:flex;align-items:center;gap:7px;padding:5px 6px;cursor:pointer;position:relative;
+    color:var(--phos);border-radius:4px;transition:background .12s ease;}
+  .lp-row:hover{background:rgba(198,208,224,.06)}
+  .lp-row.active{background:linear-gradient(90deg, rgba(198,208,224,.12), rgba(198,208,224,.02))}
+  .lp-row.active::before{content:"";position:absolute;left:-6px;top:2px;bottom:2px;width:2px;
+    background:var(--phos);box-shadow:0 0 5px rgba(198,208,224,.7)}
+  .lp-row .chip{width:9px;height:9px;border-radius:2px;flex:0 0 auto;
+    box-shadow:inset 0 0 0 .5px rgba(0,0,0,.5), 0 0 3px rgba(0,0,0,.3)}
+  .lp-row .idx{font-size:8px;letter-spacing:.05em;color:var(--phos);flex:0 0 auto;min-width:26px}
+  .lp-row .nm{font-size:7.5px;letter-spacing:.08em;color:var(--phos-dim);text-transform:uppercase;
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1}
+  .lp-row.hidden .idx,.lp-row.hidden .nm{opacity:.45}
+  .lp-row.hidden .chip{opacity:.4}
+
+  .lp-eye{flex:0 0 auto;width:18px;height:18px;border:0;padding:0;border-radius:3px;cursor:pointer;
+    background:transparent;color:var(--phos-dim);display:grid;place-items:center;
+    transition:background .12s ease, color .12s ease;}
+  .lp-eye:hover{background:rgba(198,208,224,.12);color:var(--phos)}
+  .lp-row:not(.hidden) .lp-eye{color:var(--phos)}
+  .lp-eye svg{width:15px;height:15px}
+  .lp-eye svg *{fill:none;stroke:currentColor;stroke-width:1.4;
+    stroke-linecap:round;stroke-linejoin:round;vector-effect:non-scaling-stroke}
+
+  #layers .lp-foot{display:flex;gap:6px;padding:9px 10px 11px}
+  .lp-view{flex:1;display:flex;align-items:center;justify-content:center;
+    padding:7px 4px;border:0;border-radius:5px;cursor:pointer;color:var(--phos-dim);
+    background:linear-gradient(180deg, rgba(255,255,255,.05), rgba(0,0,0,.12));
+    box-shadow:inset 0 0 0 .5px rgba(0,0,0,.3), inset 0 1px 0 rgba(255,255,255,.12);
+    transition:color .12s ease, box-shadow .12s ease;}
+  .lp-view svg{width:15px;height:15px}
+  .lp-view svg *{fill:none;stroke:currentColor;stroke-width:1.4;
+    stroke-linecap:round;stroke-linejoin:round;vector-effect:non-scaling-stroke}
+  .lp-view:hover{color:var(--phos)}
+  .lp-view.active{color:var(--phos);
+    background:linear-gradient(160deg,var(--crt),var(--crt-2));
+    box-shadow:inset 0 0 0 1px rgba(0,0,0,.6), inset 0 2px 6px rgba(0,0,0,.5),
+      0 0 0 1px rgba(198,208,224,.28)}
+  .lp-view.active svg *{filter:drop-shadow(0 0 2px rgba(198,208,224,.5))}
+
+  /* ========================================================= */
+  /* ============  顶部标题栏 · TOP BAR / CHROME  =========== */
+  /* ========================================================= */
+  #topbar{position:absolute;left:0;right:0;top:0;height:var(--top);z-index:9;
+    display:flex;align-items:center;gap:14px;padding:0 12px;
+    background:linear-gradient(180deg,var(--case) 0%,var(--case-2) 100%);
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.16), inset 0 -1px 0 rgba(0,0,0,.4),
+      0 2px 10px rgba(0,0,0,.3);
+    font-family:var(--mono);color:var(--phos);}
+  /* 左：罗盘 logo + 版本 */
+  .tb-brand{display:flex;align-items:center;gap:9px;padding-right:6px}
+  .tb-brand .compass{width:22px;height:22px;color:var(--phos)}
+  .tb-brand .compass svg{width:22px;height:22px}
+  .tb-brand .compass svg *{fill:none;stroke:currentColor;stroke-width:1.2;
+    stroke-linecap:round;stroke-linejoin:round;vector-effect:non-scaling-stroke}
+  .tb-brand .txt{display:flex;flex-direction:column;line-height:1.25}
+  .tb-brand .b1{font-size:8.5px;font-weight:600;letter-spacing:.16em;text-transform:uppercase}
+  .tb-brand .b2{font-size:7.5px;letter-spacing:.16em;color:var(--phos-dim);text-transform:uppercase}
+  .tb-brand .b1 .ver{color:var(--phos-dim);font-weight:400;margin-left:5px}
+
+  /* 中：项目名 + 编号下拉 */
+  .tb-project{margin:0 auto;display:flex;align-items:center;gap:10px;
+    padding:5px 14px;border-radius:5px;
+    background:linear-gradient(160deg,var(--crt),var(--crt-2));
+    box-shadow:inset 0 0 0 1px rgba(0,0,0,.55), inset 0 1px 6px rgba(0,0,0,.45);}
+  .tb-project .pl{font-size:8px;letter-spacing:.14em;color:var(--phos-dim);text-transform:uppercase}
+  .tb-project .pn{font-size:9.5px;letter-spacing:.06em;color:var(--phos)}
+  .tb-project .div{width:1px;height:13px;background:rgba(198,208,224,.24)}
+  .tb-project .code{display:flex;align-items:center;gap:6px;cursor:pointer;
+    font-size:9px;letter-spacing:.06em;color:var(--phos)}
+  .tb-project .code .car{width:8px;height:8px;color:var(--phos-dim)}
+  .tb-project .code .car svg{width:8px;height:8px}
+  .tb-project .code .car svg *{fill:none;stroke:currentColor;stroke-width:2;
+    stroke-linecap:round;stroke-linejoin:round;vector-effect:non-scaling-stroke}
+
+  /* 右：自动保存 + 撤销/重做 + 帮助 + 头像 */
+  .tb-right{display:flex;align-items:center;gap:12px}
+  .tb-save{display:flex;align-items:center;gap:6px;font-size:8px;letter-spacing:.1em;
+    color:var(--phos-dim);text-transform:uppercase}
+  .tb-save .dot{width:6px;height:6px;border-radius:50%;
+    background:radial-gradient(circle at 35% 30%, #d6dccf, #9aa093 60%, #61665c);
+    box-shadow:0 0 5px rgba(214,220,207,.55)}
+  .tb-actions{display:flex;align-items:center;gap:2px}
+  .tb-btn{width:26px;height:26px;border:0;border-radius:5px;cursor:pointer;
+    background:transparent;color:var(--phos-dim);display:grid;place-items:center;
+    transition:color .12s ease, background .12s ease;}
+  .tb-btn:hover{color:var(--phos);background:rgba(198,208,224,.1)}
+  .tb-btn.disabled{opacity:.3;pointer-events:none}
+  .tb-btn.flash,.rail-btn.flash,.add.flash{animation:btnFlash .18s ease}
+  @keyframes btnFlash{0%{filter:brightness(1.7)}100%{filter:brightness(1)}}
+  .tb-btn svg{width:16px;height:16px}
+  .tb-btn svg *{fill:none;stroke:currentColor;stroke-width:1.5;
+    stroke-linecap:round;stroke-linejoin:round;vector-effect:non-scaling-stroke}
+  .tb-sep{width:1px;height:18px;background:rgba(0,0,0,.34);box-shadow:1px 0 0 rgba(255,255,255,.1)}
+  .tb-avatar{width:26px;height:26px;border-radius:50%;display:grid;place-items:center;
+    font-size:10px;font-weight:600;letter-spacing:.04em;color:var(--crt);
+    background:linear-gradient(160deg,#c3ccda,#8a96a8);
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.4), 0 1px 3px rgba(0,0,0,.4);cursor:pointer}
+
+  /* ========================================================= */
+  /* ==========  右侧操作栏 · RIGHT ACTION RAIL  ============ */
+  /* ========================================================= */
+  #rail{position:absolute;right:0;top:var(--top);bottom:0;width:var(--rail);z-index:8;
+    display:flex;flex-direction:column;align-items:center;gap:2px;padding:12px 0;
+    overflow-y:auto;
+    background:linear-gradient(180deg,var(--case) 0%,var(--case-2) 100%);
+    box-shadow:inset 1px 0 0 rgba(0,0,0,.4), inset -1px 0 0 rgba(255,255,255,.12),
+      -4px 0 18px rgba(0,0,0,.3);}
+  .rail-btn{position:relative;display:flex;flex-direction:column;align-items:center;gap:3px;
+    width:50px;padding:7px 2px;border:0;border-radius:6px;cursor:pointer;
+    background:transparent;color:var(--phos-dim);font-family:var(--mono);
+    transition:background .14s ease, color .14s ease, box-shadow .14s ease;}
+  .rail-btn svg{width:18px;height:18px;display:block}
+  .rail-btn svg *{fill:none;stroke:currentColor;stroke-width:1.5;
+    stroke-linecap:round;stroke-linejoin:round;vector-effect:non-scaling-stroke}
+  .rail-btn .lbl{font-size:6.5px;letter-spacing:.08em;text-transform:uppercase;line-height:1}
+  .rail-btn:hover{color:var(--phos);
+    background:linear-gradient(180deg, rgba(255,255,255,.05), rgba(0,0,0,.08));
+    box-shadow:inset 0 0 0 .5px rgba(198,208,224,.18)}
+  .rail-btn:active{color:var(--phos);
+    background:linear-gradient(160deg,var(--crt),var(--crt-2));
+    box-shadow:inset 0 0 0 1px rgba(0,0,0,.6), inset 0 2px 8px rgba(0,0,0,.5)}
+  .rail-sep{width:32px;height:1px;margin:5px 0;
+    background:rgba(0,0,0,.3);box-shadow:0 1px 0 rgba(255,255,255,.1)}
+
+  /* ========================================================= */
+  /* ========  运行时素材节点内容 · INGEST/MATTE/ANALYZE  ==== */
+  /* ========================================================= */
+  /* 真实照片预览 */
+  .p-photo{position:relative;height:118px;border-radius:3px;overflow:hidden;
+    background:#20242f;box-shadow:inset 0 0 0 .5px rgba(0,0,0,.55)}
+  .p-photo img{width:100%;height:100%;object-fit:cover;display:block}
+  /* 抠图结果：透明棋盘底 + 居中显示 PNG */
+  .p-photo.alpha{background-color:#2b3141;
+    background-image:
+      linear-gradient(45deg, rgba(255,255,255,.055) 25%, transparent 25% 75%, rgba(255,255,255,.055) 75%),
+      linear-gradient(45deg, rgba(255,255,255,.055) 25%, transparent 25% 75%, rgba(255,255,255,.055) 75%);
+    background-size:12px 12px;background-position:0 0, 6px 6px}
+  .p-photo.alpha img{object-fit:contain}
+  /* 多图预览：卡片内 2×2 缩略网格 + 计数 */
+  .p-photo.p-multi{display:grid;grid-template-columns:1fr 1fr;grid-auto-rows:1fr;gap:2px;padding:0}
+  .p-photo.p-multi .pg-cell{position:relative;overflow:hidden;background:#20242f}
+  .p-photo.p-multi .pg-cell img{width:100%;height:100%;object-fit:cover;display:block}
+  .p-photo.alpha.p-multi{background-size:12px 12px}
+  .p-photo.alpha.p-multi .pg-cell{background:transparent}
+  .p-photo.alpha.p-multi .pg-cell img{object-fit:contain}
+  .p-photo .pg-more{position:absolute;right:6px;top:6px;font-size:8px;letter-spacing:.08em;
+    color:var(--phos);background:rgba(0,0,0,.5);border-radius:3px;padding:1px 5px}
+  /* 节点忙碌遮罩（抠图/分析中）*/
+  .p-busy{position:absolute;inset:0;z-index:5;display:flex;align-items:center;justify-content:center;
+    flex-direction:column;gap:8px;background:rgba(20,24,34,.72);color:var(--phos);
+    font-size:9px;letter-spacing:.12em;text-transform:uppercase}
+  .p-busy .spin{width:20px;height:20px;border-radius:50%;
+    border:2px solid rgba(198,208,224,.25);border-top-color:var(--phos);
+    animation:spin .8s linear infinite}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  /* 节点内嵌操作按钮（抠图/取色）*/
+  .node .acts{display:flex;gap:5px;margin:6px 6px 2px}
+  .node .act{flex:1;display:flex;align-items:center;justify-content:center;gap:5px;
+    padding:5px 4px;border:0;border-radius:4px;cursor:pointer;
+    font-family:var(--mono);font-size:8px;letter-spacing:.1em;text-transform:uppercase;
+    color:var(--phos-dim);
+    background:linear-gradient(180deg, rgba(255,255,255,.05), rgba(0,0,0,.12));
+    box-shadow:inset 0 0 0 .5px rgba(0,0,0,.3), inset 0 1px 0 rgba(255,255,255,.12);
+    transition:color .12s ease, box-shadow .12s ease}
+  .node .act:hover{color:var(--phos);box-shadow:inset 0 0 0 1px rgba(198,208,224,.3)}
+  .node .act:disabled{opacity:.4;pointer-events:none}
+  .node .act svg{width:12px;height:12px}
+  .node .act svg *{fill:none;stroke:currentColor;stroke-width:1.6;
+    stroke-linecap:round;stroke-linejoin:round;vector-effect:non-scaling-stroke}
+  /* 便签内容 */
+  .p-note-edit{min-height:80px;padding:9px;border-radius:3px;color:var(--phos);
+    font-size:11px;line-height:1.5;letter-spacing:.02em;outline:none;
+    background:linear-gradient(160deg,#3a3f34,#2f3329);
+    box-shadow:inset 0 0 0 .5px rgba(0,0,0,.5)}
+  .p-note-edit:empty::before{content:"点此输入便签…";color:var(--phos-dim);opacity:.7}
+  /* 拖拽整页高亮 */
+  #dropHint{position:absolute;inset:var(--top) var(--rail) 0 var(--dock);z-index:20;
+    display:none;align-items:center;justify-content:center;pointer-events:none;
+    background:rgba(114,134,163,.14);
+    box-shadow:inset 0 0 0 2px var(--phos);}
+  #dropHint.on{display:flex}
+  #dropHint .msg{font-family:var(--mono);font-size:13px;letter-spacing:.18em;color:var(--phos);
+    text-transform:uppercase;background:linear-gradient(160deg,var(--crt),var(--crt-2));
+    padding:14px 22px;border-radius:8px;box-shadow:0 12px 26px rgba(0,0,0,.4)}
+
+  /* 可上传节点：预览上悬浮「上传照片」入口 */
+  .p-upload{position:absolute;inset:0;z-index:4;display:flex;flex-direction:column;
+    align-items:center;justify-content:center;gap:7px;cursor:pointer;
+    color:var(--phos);background:rgba(20,24,34,.42);
+    opacity:0;transition:opacity .14s ease}
+  .node .screen-in:hover .p-upload{opacity:1}
+  .p-upload.empty{opacity:1;background:rgba(20,24,34,.30)}
+  .p-upload .ic{width:26px;height:26px}
+  .p-upload .ic svg{width:26px;height:26px}
+  .p-upload .ic svg *{fill:none;stroke:currentColor;stroke-width:1.5;
+    stroke-linecap:round;stroke-linejoin:round;vector-effect:non-scaling-stroke}
+  .p-upload .t{font-size:9px;letter-spacing:.14em;text-transform:uppercase;
+    background:rgba(0,0,0,.4);padding:3px 8px;border-radius:3px}
+  .p-upload .t.sub{font-size:7.5px;letter-spacing:.08em;opacity:.75;background:none;padding:0}
+
+  /* ========================================================= */
+  /* ======  种子卡片赋能 · 文案/纹理/模板/合成  ============= */
+  /* ========================================================= */
+  /* 文案：可编辑正文/翻译 + 参数下拉 */
+  .p-anno .line[contenteditable],.p-anno .tr[contenteditable]{outline:none;border-radius:2px;
+    padding:1px 3px;margin:0 -3px;transition:background .12s ease}
+  .p-anno .line[contenteditable]:focus,.p-anno .tr[contenteditable]:focus{background:rgba(198,208,224,.1)}
+  .p-anno .line:empty::before{content:"输入口号…";color:var(--phos-dim);opacity:.6}
+  .p-anno .tr:empty::before{content:"输入翻译…";color:var(--phos-dim);opacity:.55}
+  .p-anno .params b{cursor:pointer}
+  .p-anno .params b:hover{color:var(--phos);box-shadow:inset 0 0 0 .5px rgba(198,208,224,.4)}
+  .p-anno .params select{appearance:none;border:0;cursor:pointer;font-family:var(--mono);
+    font-size:6.5px;letter-spacing:.06em;color:var(--phos-dim);text-transform:uppercase;
+    padding:1px 5px;border-radius:2px;background:rgba(0,0,0,.28);
+    box-shadow:inset 0 0 0 .5px rgba(198,208,224,.22)}
+  .p-anno .params select:hover{color:var(--phos)}
+  .p-anno .line{white-space:pre-wrap;word-break:break-word}
+
+  /* 纹理：内置样片选择 + 上传 */
+  .p-texgrid{display:grid;grid-template-columns:repeat(4,1fr);gap:5px}
+  .p-texgrid .tx{height:34px;border-radius:3px;cursor:pointer;position:relative;
+    box-shadow:inset 0 0 0 .5px rgba(0,0,0,.5)}
+  .p-texgrid .tx.on{box-shadow:inset 0 0 0 1.5px var(--phos),0 0 6px rgba(198,208,224,.4)}
+  .p-texgrid .tx.up{display:flex;align-items:center;justify-content:center;color:var(--phos-dim);
+    background:rgba(0,0,0,.2)}
+  .p-texgrid .tx.up svg{width:16px;height:16px}
+  .p-texgrid .tx.up svg *{fill:none;stroke:currentColor;stroke-width:1.6;
+    stroke-linecap:round;stroke-linejoin:round;vector-effect:non-scaling-stroke}
+
+  /* 模板：规格选择器 */
+  .p-spec{display:flex;flex-direction:column;gap:7px;padding:2px}
+  .p-spec .prow{display:flex;align-items:center;gap:7px}
+  .p-spec .plbl{font-size:7.5px;letter-spacing:.1em;color:var(--phos-dim);text-transform:uppercase;min-width:42px}
+  .p-spec select{flex:1;appearance:none;border:0;cursor:pointer;font-family:var(--mono);
+    font-size:8.5px;letter-spacing:.04em;color:var(--phos);
+    padding:4px 7px;border-radius:3px;background:linear-gradient(160deg,#2e3648,#242c3b);
+    box-shadow:inset 0 0 0 .5px rgba(0,0,0,.5), inset 0 1px 3px rgba(0,0,0,.4)}
+  .p-spec .pv{font-size:8.5px;letter-spacing:.06em;color:var(--phos)}
+  .p-spec .preview{margin-top:2px;height:34px;border-radius:3px;position:relative;
+    background:linear-gradient(180deg,#2e3648,#242c3b);box-shadow:inset 0 0 0 .5px rgba(0,0,0,.5)}
+  .p-spec .preview .frm{position:absolute;inset:6px;outline:1px dashed var(--proof)}
+  .p-spec .preview .rt{position:absolute;font-size:6px;letter-spacing:.06em;color:var(--phos-dim);
+    top:50%;left:50%;transform:translate(-50%,-50%)}
+
+  /* 合成：真实拼贴渲染舞台 */
+  .p-stage{position:relative;height:132px;border-radius:3px;overflow:hidden;
+    box-shadow:inset 0 0 0 .5px rgba(0,0,0,.55), inset 0 0 0 1px rgba(198,208,224,.2)}
+  .p-stage .layer{position:absolute}
+  .p-stage .l-bg{inset:0}
+  .p-stage .l-tex{inset:0;opacity:.5;mix-blend-mode:screen}
+  .p-stage .l-cut{bottom:0;left:50%;transform:translateX(-50%);height:88%}
+  .p-stage .l-cut img{height:100%;display:block}
+  .p-stage .l-slogan{left:0;right:0;top:8px;text-align:center;color:#fff;
+    font-weight:700;letter-spacing:.16em;font-size:13px;text-shadow:0 1px 3px rgba(0,0,0,.6)}
+  .p-stage .l-sub{left:0;right:0;top:26px;text-align:center;color:rgba(255,255,255,.85);
+    font-size:8px;letter-spacing:.08em;font-style:italic}
+  .p-stage .empty{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+    color:var(--phos-dim);font-size:8.5px;letter-spacing:.1em;text-transform:uppercase;text-align:center;padding:0 16px}
+
+  /* ========================================================= */
+  /* ======  卡片放大编辑 / 连接模式 / 空态提示  ============= */
+  /* ========================================================= */
+  /* 卡片右上角「放大」按钮 */
+  .node .enlarge{position:absolute;top:5px;right:6px;z-index:6;width:18px;height:18px;
+    border:0;border-radius:4px;cursor:pointer;background:rgba(0,0,0,.28);color:var(--phos-dim);
+    display:grid;place-items:center;opacity:0;transition:opacity .14s ease, color .12s ease}
+  .node:hover .enlarge{opacity:1}
+  .node .enlarge:hover{color:var(--phos);background:rgba(198,208,224,.18)}
+  .node .enlarge svg{width:12px;height:12px}
+  .node .enlarge svg *{fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;vector-effect:non-scaling-stroke}
+  /* 卡片删除：右上角悬停出现；若同时有放大按钮则放到其左侧 */
+  .node .cardDel{position:absolute;top:5px;right:6px;z-index:6;width:18px;height:18px;
+    border:0;border-radius:4px;cursor:pointer;background:rgba(0,0,0,.28);color:var(--phos-dim);
+    display:grid;place-items:center;opacity:0;transition:opacity .14s ease, color .12s ease}
+  .node.has-enlarge .cardDel{right:28px}
+  .node:hover .cardDel{opacity:1}
+  .node .cardDel:hover{color:var(--proof);background:rgba(198,208,224,.18)}
+  .node .cardDel svg{width:12px;height:12px}
+  .node .cardDel svg *{fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;vector-effect:non-scaling-stroke}
+  .node.locked .cardDel{display:none}
+
+  /* 连接模式：画布高亮 + 卡片端口放大可点 */
+  #screen.connect{cursor:crosshair}
+  #screen.connect .node{cursor:crosshair}
+  #screen.connect .node .port{transform:translateY(-50%) scale(1.35);box-shadow:0 0 8px rgba(198,208,224,.6)}
+  .node.connect-src{box-shadow:0 0 0 2px var(--phos),0 0 14px rgba(198,208,224,.55) !important}
+
+  /* 空画布提示 */
+  #emptyHint{position:absolute;inset:var(--top) var(--rail) 0 var(--dock);z-index:4;
+    display:flex;align-items:center;justify-content:center;pointer-events:none;
+    flex-direction:column;gap:10px;color:var(--phos-dim);text-align:center}
+  #emptyHint.hide{display:none}
+  #emptyHint .big{font-size:15px;letter-spacing:.14em;text-transform:uppercase;color:var(--phos)}
+  #emptyHint .sub{font-size:10px;letter-spacing:.1em}
+
+  /* 全屏放大编辑浮层 */
+  #enlargeModal{position:fixed;inset:0;z-index:50;display:none;
+    background:rgba(20,24,32,.66);backdrop-filter:blur(3px);
+    align-items:center;justify-content:center}
+  #enlargeModal.on{display:flex}
+  #enlargeModal .frame{position:relative;width:min(1000px,86vw);height:min(760px,84vh);
+    border-radius:12px;overflow:hidden;display:flex;flex-direction:column;
+    background:linear-gradient(158deg,var(--case-hi),var(--case) 26%,var(--case-2));
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.28), inset 0 0 0 1px rgba(0,0,0,.4), 0 30px 70px rgba(0,0,0,.55)}
+  #enlargeModal .m-head{display:flex;align-items:center;gap:9px;padding:12px 14px;
+    box-shadow:inset 0 -1px 0 rgba(0,0,0,.34), 0 1px 0 rgba(255,255,255,.1);color:var(--phos)}
+  #enlargeModal .m-head .midx{font-size:9px;letter-spacing:.1em;color:var(--phos-dim);padding:2px 6px;
+    border-radius:3px;background:rgba(0,0,0,.24)}
+  #enlargeModal .m-head .mname{font-size:13px;font-weight:600;letter-spacing:.05em}
+  #enlargeModal .m-head .mmeta{font-size:9px;letter-spacing:.14em;color:var(--phos-dim);text-transform:uppercase}
+  #enlargeModal .m-close{margin-left:auto;width:28px;height:28px;border:0;border-radius:6px;cursor:pointer;
+    background:rgba(0,0,0,.24);color:var(--phos);font-size:16px;line-height:1;display:grid;place-items:center}
+  #enlargeModal .m-close:hover{background:rgba(198,208,224,.18)}
+  #enlargeModal .m-body{flex:1;min-height:0;overflow:auto;padding:16px;
+    background:linear-gradient(160deg,var(--crt),var(--crt-2));margin:12px;border-radius:8px;
+    box-shadow:inset 0 0 0 1px rgba(0,0,0,.6), inset 0 2px 12px rgba(0,0,0,.5)}
+  /* 放大态：多图网格 */
+  .m-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px}
+  .m-grid .cell{position:relative;border-radius:6px;overflow:hidden;aspect-ratio:1;
+    background:#222836;box-shadow:inset 0 0 0 .5px rgba(0,0,0,.5);cursor:pointer}
+  .m-grid .cell img{width:100%;height:100%;object-fit:cover;display:block}
+  .m-grid .cell.sel{box-shadow:inset 0 0 0 2px var(--phos),0 0 10px rgba(198,208,224,.4)}
+  .m-grid .cell .del{position:absolute;top:4px;right:4px;width:18px;height:18px;border:0;border-radius:4px;
+    background:rgba(0,0,0,.5);color:#fff;cursor:pointer;font-size:12px;line-height:1;display:grid;place-items:center;opacity:0;transition:opacity .12s}
+  .m-grid .cell:hover .del{opacity:1}
+  .m-grid .add{display:flex;align-items:center;justify-content:center;aspect-ratio:1;border-radius:6px;cursor:pointer;
+    color:var(--phos-dim);background:rgba(255,255,255,.04);box-shadow:inset 0 0 0 1px rgba(198,208,224,.2)}
+  .m-grid .add:hover{color:var(--phos);box-shadow:inset 0 0 0 1.5px rgba(198,208,224,.4)}
+  .m-grid .add svg{width:28px;height:28px}
+  .m-grid .add svg *{fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round;vector-effect:non-scaling-stroke}
+  /* 放大态：单图大预览 */
+  .m-single{display:flex;flex-direction:column;gap:12px;height:100%}
+  .m-single .stage{flex:1;min-height:0;display:flex;align-items:center;justify-content:center;
+    border-radius:6px;background:#20242f;box-shadow:inset 0 0 0 .5px rgba(0,0,0,.5)}
+  .m-single .stage.alpha{background-color:#2b3141;background-image:linear-gradient(45deg,rgba(255,255,255,.05) 25%,transparent 25% 75%,rgba(255,255,255,.05) 75%),linear-gradient(45deg,rgba(255,255,255,.05) 25%,transparent 25% 75%,rgba(255,255,255,.05) 75%);background-size:20px 20px;background-position:0 0,10px 10px}
+  .m-single .stage img{max-width:100%;max-height:100%;object-fit:contain}
+  /* 放大态：文字编辑 */
+  .m-text{display:flex;flex-direction:column;gap:14px;color:var(--phos)}
+  .m-text label{font-size:9px;letter-spacing:.12em;color:var(--phos-dim);text-transform:uppercase;display:block;margin-bottom:5px}
+  .m-text .ed{min-height:60px;padding:10px 12px;border-radius:6px;font-size:16px;line-height:1.5;outline:none;
+    background:rgba(0,0,0,.28);box-shadow:inset 0 0 0 .5px rgba(198,208,224,.2);color:var(--phos)}
+  .m-text .ed.sub{font-size:12px;font-style:italic;color:var(--phos-dim);min-height:40px}
+
+  /* ==========  放大态 · 自由拼贴编辑器（合成卡）  ========== */
+  .m-collage{display:flex;gap:14px;height:100%;min-height:0}
+  /* 左侧素材托盘：抠图素材 3 列正方形网格 + 背景/底纹/文案区 */
+  .cl-tray{width:236px;flex:none;display:flex;flex-direction:column;gap:6px;overflow:auto;padding-right:6px}
+  .cl-tray .ttl{font-size:9px;letter-spacing:.14em;color:var(--phos-dim);text-transform:uppercase;margin:6px 0 2px}
+  .cl-tray .grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+  .cl-tray .thumb{position:relative;border-radius:6px;overflow:hidden;cursor:pointer;aspect-ratio:1;
+    box-shadow:inset 0 0 0 .5px rgba(0,0,0,.5);
+    background-color:#2b3141;
+    background-image:linear-gradient(45deg,rgba(255,255,255,.06) 25%,transparent 25% 75%,rgba(255,255,255,.06) 75%),linear-gradient(45deg,rgba(255,255,255,.06) 25%,transparent 25% 75%,rgba(255,255,255,.06) 75%);
+    background-size:14px 14px;background-position:0 0,7px 7px}
+  .cl-tray .thumb img{position:absolute;inset:4px;width:calc(100% - 8px);height:calc(100% - 8px);object-fit:contain}
+  .cl-tray .thumb:hover{box-shadow:inset 0 0 0 1.5px var(--phos),0 0 10px rgba(198,208,224,.35)}
+  .cl-tray .thumb .add-badge{position:absolute;right:3px;bottom:3px;width:15px;height:15px;border-radius:4px;
+    background:rgba(0,0,0,.6);color:var(--phos);display:grid;place-items:center;font-size:11px;line-height:1}
+  .cl-tray .txt-chip{padding:8px;border-radius:6px;cursor:pointer;color:var(--phos);font-size:11px;
+    background:rgba(0,0,0,.28);box-shadow:inset 0 0 0 .5px rgba(198,208,224,.2);
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .cl-tray .txt-chip:hover{box-shadow:inset 0 0 0 1px rgba(198,208,224,.4)}
+  .cl-tray .empty{font-size:9px;color:var(--phos-dim);letter-spacing:.06em;padding:6px 2px;line-height:1.6}
+  /* 背景色选择：色板色 + 自定义拾色 + 图片底纹缩略 */
+  .cl-swatches{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+  .cl-swatches .sw{width:24px;height:24px;border-radius:5px;cursor:pointer;box-shadow:inset 0 0 0 .5px rgba(0,0,0,.5)}
+  .cl-swatches .sw.on{box-shadow:0 0 0 2px var(--phos),inset 0 0 0 .5px rgba(0,0,0,.5)}
+  .cl-swatches .sw.pick{position:relative;overflow:hidden;display:grid;place-items:center;color:var(--phos);
+    background:conic-gradient(from 0deg,#c33,#cc3,#3c3,#3cc,#33c,#c3c,#c33)}
+  .cl-swatches .sw.pick input{position:absolute;inset:0;opacity:0;cursor:pointer}
+  .cl-bgtex{display:flex;gap:6px;flex-wrap:wrap}
+  .cl-bgtex .bt{width:38px;height:26px;border-radius:5px;overflow:hidden;cursor:pointer;position:relative;
+    box-shadow:inset 0 0 0 .5px rgba(0,0,0,.5)}
+  .cl-bgtex .bt img{width:100%;height:100%;object-fit:cover;display:block}
+  .cl-bgtex .bt.on{box-shadow:0 0 0 2px var(--phos)}
+  .cl-bgtex .bt.none{display:grid;place-items:center;color:var(--phos-dim);font-size:8px;background:rgba(0,0,0,.24)}
+  .cl-addtext{display:flex;gap:6px}
+  .cl-addtext input{flex:1;min-width:0;border:0;border-radius:5px;padding:6px 8px;font-family:var(--mono);font-size:11px;
+    color:var(--phos);background:rgba(0,0,0,.3);box-shadow:inset 0 0 0 .5px rgba(198,208,224,.2)}
+  .cl-addtext button{border:0;border-radius:5px;padding:0 10px;cursor:pointer;font-family:var(--mono);font-size:10px;
+    color:var(--phos-dim);background:rgba(0,0,0,.3);box-shadow:inset 0 0 0 .5px rgba(198,208,224,.2)}
+  .cl-addtext button:hover{color:var(--phos);box-shadow:inset 0 0 0 1px rgba(198,208,224,.4)}
+  /* 右侧拼贴舞台 */
+  .cl-main{flex:1;min-width:0;display:flex;flex-direction:column;gap:8px}
+  .cl-bar{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+  .cl-bar .sp{flex:1}
+  .cl-bar button{display:flex;align-items:center;gap:4px;padding:5px 9px;border:0;border-radius:5px;cursor:pointer;
+    font-family:var(--mono);font-size:9px;letter-spacing:.08em;text-transform:uppercase;
+    color:var(--phos-dim);background:rgba(0,0,0,.28);box-shadow:inset 0 0 0 .5px rgba(198,208,224,.2)}
+  .cl-bar button:hover{color:var(--phos);box-shadow:inset 0 0 0 1px rgba(198,208,224,.4)}
+  .cl-bar button svg{width:12px;height:12px}
+  .cl-bar button svg *{fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;vector-effect:non-scaling-stroke}
+  .cl-stagewrap{flex:1;min-height:0;display:flex;align-items:center;justify-content:center;
+    border-radius:6px;background:#20242f;box-shadow:inset 0 0 0 .5px rgba(0,0,0,.5);overflow:hidden;padding:46px}
+  /* 画布盒：定位参照；内含裁切层(stage) + 不裁切的交互层(overlay) */
+  .cl-stagebox{position:relative}
+  /* 画布本体：overflow 裁切，所见即最终成品（超出部分不显示，但素材数据仍完整） */
+  .cl-stage{position:absolute;inset:0;overflow:hidden;border-radius:3px;
+    box-shadow:0 6px 20px rgba(0,0,0,.4)}
+  /* 真实画布边界：虚线框 */
+  .cl-stagebox::after{content:"";position:absolute;inset:0;border-radius:3px;pointer-events:none;z-index:3;
+    box-shadow:inset 0 0 0 1px rgba(198,208,224,.35);outline:1px dashed rgba(198,208,224,.5);outline-offset:0}
+  .cl-stage .cl-item{position:absolute;cursor:grab;touch-action:none;user-select:none}
+  .cl-stage .cl-item.dragging{cursor:grabbing}
+  .cl-stage .cl-item img{width:100%;height:100%;object-fit:contain;display:block;pointer-events:none;-webkit-user-drag:none}
+  .cl-stage .cl-item.txt{display:flex;align-items:center;justify-content:center;text-align:center;
+    font-weight:700;letter-spacing:.1em;line-height:1.2;text-shadow:0 1px 3px rgba(0,0,0,.55);padding:2px 6px}
+  /* 交互层：覆盖在画布上、不裁切，承载选中框 + 手柄，超出画布也能抓 */
+  .cl-overlay{position:absolute;inset:0;overflow:visible;pointer-events:none;z-index:4}
+  .cl-overlay .cl-sel{position:absolute;outline:1.5px dashed var(--phos);outline-offset:0;
+    pointer-events:auto;cursor:grab}
+  .cl-overlay .cl-sel.dragging{cursor:grabbing}
+  .cl-overlay .cl-sel .h{position:absolute;width:14px;height:14px;border-radius:3px;background:var(--phos);
+    box-shadow:0 0 0 1px rgba(0,0,0,.4);pointer-events:auto}
+  .cl-overlay .cl-sel .h.br{right:-7px;bottom:-7px;cursor:nwse-resize}
+  .cl-overlay .cl-sel .h.del{left:-7px;top:-7px;background:var(--proof);color:#fff;cursor:pointer;
+    display:flex;align-items:center;justify-content:center;font-size:11px;line-height:1}
+
+  /* 放大态 · 色板明细 */
+  .m-pal-big{display:flex;flex-direction:column;gap:8px;color:var(--phos)}
+  .m-pal-big .prow{display:flex;align-items:center;gap:12px;padding:8px 10px;border-radius:6px;
+    background:rgba(0,0,0,.24);box-shadow:inset 0 0 0 .5px rgba(198,208,224,.16)}
+  .m-pal-big .sw{width:34px;height:34px;border-radius:5px;box-shadow:inset 0 0 0 .5px rgba(0,0,0,.5)}
+  .m-pal-big .hx{font-size:14px;letter-spacing:.1em;min-width:96px}
+  .m-pal-big .use{font-size:11px;color:var(--phos-dim);flex:1}
+  .m-pal-big .cp{border:0;border-radius:5px;cursor:pointer;padding:5px 10px;font-family:var(--mono);
+    font-size:9px;letter-spacing:.08em;color:var(--phos-dim);background:rgba(255,255,255,.05);
+    box-shadow:inset 0 0 0 .5px rgba(198,208,224,.24)}
+  .m-pal-big .cp:hover{color:var(--phos);box-shadow:inset 0 0 0 1px rgba(198,208,224,.45)}
+</style>
+</head>
+<body>
+  <svg width="0" height="0" style="position:absolute">
+    <filter id="grainFilter"><feTurbulence type="fractalNoise" baseFrequency="0.72" numOctaves="2" stitchTiles="stitch"/><feColorMatrix type="saturate" values="0"/></filter>
+  </svg>
+
+  <div id="shell">
+    <div id="screen">
+      <!-- 顶部标题栏 / 应用外壳 -->
+      <div id="topbar">
+        <div class="tb-brand">
+          <span class="compass"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9.4"/><path d="M12 4 L14 11 L12 20 L10 11 Z" fill="currentColor" stroke="none"/><path d="M12 2.2 V4 M12 20 V21.8 M2.2 12 H4 M20 12 H21.8"/></svg></span>
+          <span class="txt"><span class="b1">ˏ꒰ঌ Bannunny ໒꒱ྀིˎ</span><span class="b2">Fan Support Studio</span></span>
+        </div>
+        <div class="tb-project">
+          <span class="pl">Project :</span>
+          <span class="pn">Fan Support Banner</span>
+          <span class="div"></span>
+          <span class="code">S-01-R-01-0-01 <span class="car"><svg viewBox="0 0 12 12"><path d="M2 4 L6 8 L10 4"/></svg></span></span>
+        </div>
+        <div class="tb-right">
+          <span class="tb-save"><span class="dot"></span>Auto-Save <span id="saveTime">10:42:17</span></span>
+          <div class="tb-actions">
+            <button class="tb-btn" id="btnUndo" title="撤销 (⌘Z)"><svg viewBox="0 0 24 24"><path d="M9 7 L4 12 L9 17"/><path d="M4 12 H14 A5 5 0 0 1 14 22 H12"/></svg></button>
+            <button class="tb-btn" id="btnRedo" title="重做 (⇧⌘Z)"><svg viewBox="0 0 24 24"><path d="M15 7 L20 12 L15 17"/><path d="M20 12 H10 A5 5 0 0 0 10 22 H12"/></svg></button>
+          </div>
+          <span class="tb-sep"></span>
+          <button class="tb-btn" title="帮助"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9.4 9.2 A2.6 2.6 0 1 1 12.6 12 C12 12.4 12 13 12 14"/><circle cx="12" cy="17.2" r=".6" fill="currentColor" stroke="none"/></svg></button>
+          <span class="tb-avatar">A</span>
+        </div>
+      </div>
+
+      <div id="viewport">
+        <div id="world">
+          <div id="grid"></div>
+          <svg id="wires"></svg>
+        </div>
+      </div>
+
+      <svg id="grain"><rect width="100%" height="100%" filter="url(#grainFilter)"/></svg>
+      <div id="scan"></div>
+      <div id="vign"></div>
+
+      <div id="corner"></div>
+      <div id="rulerTop"></div>
+      <div id="rulerLeft"></div>
+
+      <div id="plateTag">FANG FEI · naufenck@foxmail.com · +86 13422220925</div>
+      <div id="hud">
+        <span class="k"><svg class="field-ico" viewBox="0 0 26 12"><path d="M1 6 C 8 6, 10 3, 25 3"/><circle cx="25" cy="3" r="2"/></svg>磁力场线 / 素材流向</span>
+        <span>从卡片右侧端口拖到目标卡片即可连线 · 点击场线选中后 Delete 断开 · 拖空白平移 · 滚轮缩放</span>
+      </div>
+      <div id="controls">
+        <button id="zoomOut" title="缩小">−</button>
+        <span class="zoom" id="zoomLabel">100%</span>
+        <button id="zoomIn" title="放大">+</button>
+        <button class="reset" id="reset" title="复位">RESET</button>
+      </div>
+
+      <!-- 统一左侧档案坞：工具 + 图层（品牌信息已上移至顶栏）-->
+      <div id="dock">
+        <div id="toolbar"></div>
+
+        <div id="layers">
+          <div class="lp-head"><span class="ttl">Specimen Layers</span><button class="add" id="lpAdd" title="新增图层">+</button></div>
+          <div class="lp-scroll" id="lpScroll"></div>
+          <div class="lp-foot">
+            <button class="lp-view active" data-view="field" title="场图视图 / FIELD">
+              <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.4"/><circle cx="12" cy="12" r="8.2"/></svg>
+            </button>
+            <button class="lp-view" data-view="list" title="清单视图 / LIST">
+              <svg viewBox="0 0 24 24"><rect x="3.5" y="5" width="7" height="6" rx="1"/><rect x="3.5" y="13" width="7" height="6" rx="1"/><path d="M13.5 7 H20.5 M13.5 12 H20.5 M13.5 17 H20.5"/></svg>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 右侧操作栏 -->
+      <div id="rail"></div>
+
+      <!-- 空画布提示 -->
+      <div id="emptyHint"><div class="big">空白画布</div><div class="sub">从左侧导航选择卡片类型添加 · A 上传图片 / B 参考图 / C 抠图 / D 取色 / E 文字 / F 物料 / G 拼接画布</div></div>
+
+      <!-- 全页拖拽上传提示 -->
+      <div id="dropHint"><div class="msg">松手上传素材 · Drop to Ingest</div></div>
+      <!-- 隐藏的文件选择 input -->
+      <input id="fileInput" type="file" accept="image/*" multiple style="display:none">
+      <input id="texInput" type="file" accept="image/*" style="display:none">
+    </div>
+  </div>
+
+  <!-- 卡片放大细化编辑浮层 -->
+  <div id="enlargeModal">
+    <div class="frame">
+      <div class="m-head"><span class="midx" id="mIdx">A-01</span><span class="mname" id="mName">卡片</span><span class="mmeta" id="mMeta">CARD</span><button class="m-close" id="mClose">×</button></div>
+      <div class="m-body" id="mBody"></div>
+    </div>
+  </div>
+  <input id="gridInput" type="file" accept="image/*" multiple style="display:none">
+
+<script>
+  const SVGNS="http://www.w3.org/2000/svg";
+  /* ============================================================
+     抠图 · 兜底算法（本地 · 无需模型/联网）
+     从图片四边采样背景色，自边缘漫水填充，抹掉与背景相近的像素。
+     对纯色/浅色背景的应援图效果好；瞬时完成，返回透明 PNG 的 Blob。
+     仅当高清 AI 模型不可用（无网络 / 不支持）时作为回退。
+     ============================================================ */
+  async function cornerFloodRemove(src,opts){
+    const tol=(opts&&opts.tolerance!=null)?opts.tolerance:32;   // 颜色容差（越大抠得越狠）
+    const img=await loadImage(typeof src==="string"?src:src.src||src);
+    const W=img.naturalWidth||img.width, H=img.naturalHeight||img.height;
+    const cv=document.createElement("canvas"); cv.width=W; cv.height=H;
+    const ctx=cv.getContext("2d",{willReadFrequently:true});
+    ctx.drawImage(img,0,0,W,H);
+    const id=ctx.getImageData(0,0,W,H); const d=id.data;
+    const idx=(x,y)=>(y*W+x)*4;
+
+    // 1) 采样四条边的像素，取中位色作为背景基准色
+    const samples=[];
+    const step=Math.max(1,Math.round(Math.min(W,H)/64));
+    for(let x=0;x<W;x+=step){ samples.push(idx(x,0)); samples.push(idx(x,H-1)); }
+    for(let y=0;y<H;y+=step){ samples.push(idx(0,y)); samples.push(idx(W-1,y)); }
+    const med=c=>{ const a=samples.map(p=>d[p+c]).sort((u,v)=>u-v); return a[a.length>>1]||0; };
+    const br=med(0), bg=med(1), bb=med(2);
+
+    // 2) 从四边入队，漫水填充：与背景色距离在容差内的像素判为背景 -> 透明
+    const N=W*H;
+    const visited=new Uint8Array(N);
+    const stack=[];
+    const near=(p)=>{ const dr=d[p]-br,dg=d[p+1]-bg,db=d[p+2]-bb; return (dr*dr+dg*dg+db*db)<=tol*tol*3; };
+    const pushIf=(x,y)=>{ if(x<0||y<0||x>=W||y>=H) return; const i=y*W+x; if(visited[i]) return; visited[i]=1; stack.push(x,y); };
+    for(let x=0;x<W;x++){ pushIf(x,0); pushIf(x,H-1); }
+    for(let y=0;y<H;y++){ pushIf(0,y); pushIf(W-1,y); }
+    while(stack.length){
+      const y=stack.pop(), x=stack.pop(); const p=idx(x,y);
+      if(!near(p)) continue;
+      d[p+3]=0;                         // 判为背景 -> 全透明
+      pushIf(x+1,y); pushIf(x-1,y); pushIf(x,y+1); pushIf(x,y-1);
+    }
+
+    // 3) 边缘羽化：对半透明/邻接透明的像素轻微降 alpha，去锯齿
+    const out=new Uint8ClampedArray(d);
+    for(let y=1;y<H-1;y++) for(let x=1;x<W-1;x++){
+      const p=idx(x,y); if(d[p+3]===0) continue;
+      let clear=0;
+      if(d[idx(x+1,y)+3]===0)clear++; if(d[idx(x-1,y)+3]===0)clear++;
+      if(d[idx(x,y+1)+3]===0)clear++; if(d[idx(x,y-1)+3]===0)clear++;
+      if(clear) out[p+3]=Math.max(0, d[p+3]-clear*46);
+    }
+    ctx.putImageData(new ImageData(out,W,H),0,0);
+    return await new Promise(res=>cv.toBlob(res,"image/png"));
+  }
+
+  /* ============================================================
+     高清抠图 · RMBG-1.4（浏览器内 transformers.js · WebGPU/WASM）
+     移植自「手幅工坊」：真·AI 前景分割，边缘远好于兜底算法。
+     首次使用后台下载一次模型权重，之后走缓存；GPU 用 fp16，无 GPU 用量化模型跑 CPU。
+     离线 / 不支持 / 失败时自动回退到 cornerFloodRemove。
+     ============================================================ */
+  const _hasWebGPU=(async()=>{try{if(!navigator.gpu)return false;const a=await navigator.gpu.requestAdapter();return !!a}catch(_){return false}})();
+  const HD_MODEL_ID="briaai/RMBG-1.4";
+  let _tfLib=null, _hdModel=null, _hdProc=null, _hdLoad=null, _hdInfo="", _hdBad=false;
+  async function loadHdModel(onP){
+    if(_hdModel&&_hdProc) return true;
+    if(_hdBad) return false;
+    if(_hdLoad) return _hdLoad;
+    _hdLoad=(async()=>{
+      if(!_tfLib){ _tfLib=await import("https://esm.sh/@huggingface/transformers@3.5.1"); }
+      const {AutoModel,AutoProcessor}=_tfLib;
+      const gpu=await _hasWebGPU;
+      const opts=gpu?{device:"webgpu",dtype:"fp16"}:{device:"wasm",dtype:"quantized"};
+      _hdInfo=gpu?"WebGPU":"CPU";
+      onP&&onP("首次加载高清模型");
+      try{ _hdModel=await AutoModel.from_pretrained(HD_MODEL_ID,opts); }
+      catch(e){ console.warn("高清模型 GPU 加载失败，回退 CPU",e); _hdInfo="CPU";
+        _hdModel=await AutoModel.from_pretrained(HD_MODEL_ID,{device:"wasm",dtype:"quantized"}); }
+      _hdProc=await AutoProcessor.from_pretrained(HD_MODEL_ID);
+      return true;
+    })().catch(e=>{ console.warn("高清模型加载失败，改用兜底抠图",e); _hdBad=true; _hdLoad=null; return false; });
+    return _hdLoad;
+  }
+  // RMBG-1.4 抠图：输入 dataURL/URL，输出透明 PNG 的 dataURL
+  async function cutoutHD(src,onP){
+    const ok=await loadHdModel(onP); if(!ok) throw new Error("hd-unavailable");
+    const {RawImage}=_tfLib;
+    onP&&onP(_hdInfo==="WebGPU"?"高清秒抠中":"高清抠图中");
+    const image=await RawImage.fromURL(src);
+    const {pixel_values}=await _hdProc(image);
+    const out=await _hdModel({input:pixel_values});
+    const key=Object.keys(out)[0];
+    const mask=await RawImage.fromTensor(out[key][0].mul(255).to("uint8")).resize(image.width,image.height);
+    const c=document.createElement("canvas");c.width=image.width;c.height=image.height;
+    const ctx=c.getContext("2d",{willReadFrequently:true});
+    const base=await loadImage(src);ctx.drawImage(base,0,0,image.width,image.height);
+    const id=ctx.getImageData(0,0,image.width,image.height),d=id.data,md=mask.data;
+    for(let i=0,j=0;i<d.length;i+=4,j++){ d[i+3]=md[j]; }
+    ctx.putImageData(id,0,0);
+    return c.toDataURL("image/png");
+  }
+  // 后台预热：页面加载后就开始下模型，真正点抠图接近秒开
+  function warmupHd(){ loadHdModel().catch(()=>{}); }
+  /* —— 统一抠图入口：先试高清 AI，失败回退兜底算法；统一返回透明 PNG dataURL —— */
+  async function smartMatte(src,onP){
+    try{ return await cutoutHD(src,onP); }
+    catch(e){
+      onP&&onP("改用快速抠图");
+      const blob=await cornerFloodRemove(src,{output:{format:"image/png",quality:1}});
+      return await blobToDataURL(blob);
+    }
+  }
+
+  const screenEl=document.getElementById("screen");
+  const world=document.getElementById("world");
+  const gridEl=document.getElementById("grid");
+  const wires=document.getElementById("wires");
+  const rulerTop=document.getElementById("rulerTop");
+  const rulerLeft=document.getElementById("rulerLeft");
+  const zoomLabel=document.getElementById("zoomLabel");
+  const RW=26, UNIT=32, DOCK=172;
+  let panX=DOCK+RW+40, panY=RW+40, scale=1;
+  const MIN=0.3, MAX=3;
+
+  /* —— 纹理样片 / 模板规格 预设（供构造器与逻辑共用）—— */
+  const TEX_PRESETS=[
+    {name:"星点",css:"background-color:#2f3a4e;background-image:radial-gradient(circle at 6px 6px, rgba(198,208,224,.8) 0 1.2px, transparent 1.8px);background-size:16px 16px"},
+    {name:"网格纸",css:"background-color:#e8ebf0;background-image:linear-gradient(rgba(60,76,102,.5) 1px,transparent 1px),linear-gradient(90deg,rgba(60,76,102,.5) 1px,transparent 1px);background-size:8px 8px"},
+    {name:"斜纹",css:"background:repeating-linear-gradient(45deg,#5a6c8a 0 4px,#3f4d66 4px 8px)"},
+    {name:"撕纸",css:"background:linear-gradient(180deg,#5a6c8a,#3f4d66)"},
+    {name:"噪点",css:"background-color:#333a49;background-image:radial-gradient(circle at 3px 3px, rgba(198,208,224,.5) 0 .8px, transparent 1.2px);background-size:6px 6px"},
+    {name:"渐层",css:"background:linear-gradient(135deg,#7286a3,#31476f)"},
+    {name:"波点",css:"background-color:#2b3141;background-image:radial-gradient(circle at 8px 8px, rgba(198,208,224,.55) 0 2px, transparent 2.6px);background-size:16px 16px"},
+  ];
+  const TPL_SIZES=[
+    {name:"手幅 30×10cm",  ratio:3.0, mm:"300 × 100 mm"},
+    {name:"手幅 40×15cm",  ratio:2.67,mm:"400 × 150 mm"},
+    {name:"横幅 60×20cm",  ratio:3.0, mm:"600 × 200 mm"},
+    {name:"应援牌 A4",     ratio:1.414,mm:"297 × 210 mm"},
+    {name:"方形 20×20cm",  ratio:1.0, mm:"200 × 200 mm"},
+  ];
+
+  /* —— 内容预览类型 · 8 类构造器 —— */
+  // 1 明星图 / STARS：多格网格 + 选中态 + 计数
+  function pStars(n,sel){let h='<div class="p-stars">';
+    for(let k=0;k<n;k++)h+=`<div class="cell${k===sel?' sel':''}"></div>`;
+    h+=`<span class="count">${n} 张</span></div>`;return h}
+  // 2 参考图 / REFERENCE：竖图 + 取色条
+  function pRef(){const c=["#94a6c4","#5a6e8a","#31476f","#c3ccda","#3f4d66"];
+    return '<div class="p-ref"><div class="shot"></div><div class="pick">'
+      +c.map((x,k)=>`<span style="background:${x}">${k===1?'<span class="dropper"></span>':''}</span>`).join('')
+      +'</div></div>'}
+  // 3 抠图 / CUTOUT：透明底 + 轮廓 + 手写批注
+  function pCutout(){return '<div class="p-cutout"><span class="fig"></span>'
+    +'<span class="p-hand" style="right:8px;top:8px">tracing paper</span>'
+    +'<span class="p-tag" style="left:8px;bottom:6px">PNG · ALPHA</span></div>'}
+  // 4 色板 / PALETTE：色块行 + hex
+  function pPalette(){const rows=[["#9ea39a","主色"],["#7c8079","辅色"],["#5f635c","描边"],["#4c4f49","阴影"],["#2a2d29","墨"]];
+    return '<div class="p-pal">'+rows.map(([hex,use])=>
+      `<div class="row"><span class="chip" style="background:${hex}"></span><span class="hex">${hex.toUpperCase()}</span><span class="use">${use}</span></div>`).join('')+'</div>'}
+  // 5 文案 / ANNOTATION：可编辑正文 + 翻译 + 字体参数下拉
+  function pAnno(){
+    const fonts=["思源黑体","思源宋体","站酷高端黑","阿里巴巴普惠体"];
+    const sizes=["48 pt","60 pt","72 pt","96 pt"];
+    const aligns=["居左","居中","居右"];
+    const sel=(cls,arr,def)=>`<select data-anno="${cls}">`+arr.map(v=>`<option${v===def?" selected":""}>${v}</option>`).join("")+"</select>";
+    return '<div class="p-anno">'
+      +'<div class="line" contenteditable="true">永远应援 · 生日快乐</div>'
+      +'<div class="tr" contenteditable="true">Always by your side</div>'
+      +'<div class="params">'+sel("font",fonts,"思源黑体")+sel("size",sizes,"72 pt")+sel("align",aligns,"居中")+'</div>'
+      +'</div>';
+  }
+  // 6 纹理 / TEXTURE：内置样片选择 + 上传
+  function pTexture(){
+    return '<div class="p-texgrid">'
+      +TEX_PRESETS.map((t,i)=>`<div class="tx${i===0?' on':''}" data-tex="${i}" style="${t.css}" title="${t.name}"></div>`).join("")
+      +'<div class="tx up" data-tex="up" title="上传底纹"><svg viewBox="0 0 24 24"><path d="M12 15 V5 M8 9 L12 5 L16 9"/><path d="M5 15 V19 A1.5 1.5 0 0 0 6.5 20.5 H17.5 A1.5 1.5 0 0 0 19 19 V15"/></svg></div>'
+      +'</div>';
+  }
+  // 7 模板 / TEMPLATE：规格选择器
+  function pTemplate(){
+    const sizeSel='<select data-spec="size">'+TPL_SIZES.map((z,i)=>`<option value="${i}"${i===0?" selected":""}>${z.name}</option>`).join("")+'</select>';
+    const dpiSel='<select data-spec="dpi">'+["300 DPI","150 DPI","72 DPI"].map((v,i)=>`<option${i===0?" selected":""}>${v}</option>`).join("")+'</select>';
+    const modeSel='<select data-spec="mode">'+["CMYK","RGB"].map((v,i)=>`<option${i===0?" selected":""}>${v}</option>`).join("")+'</select>';
+    return '<div class="p-spec">'
+      +'<div class="prow"><span class="plbl">尺寸</span>'+sizeSel+'</div>'
+      +'<div class="prow"><span class="plbl">精度</span>'+dpiSel+'</div>'
+      +'<div class="prow"><span class="plbl">色彩</span>'+modeSel+'</div>'
+      +'<div class="preview"><span class="frm"></span><span class="rt" data-spec="rt">30 × 10 CM</span></div>'
+      +'</div>';
+  }
+  // 8 输出 / 拼贴画布：真实合成舞台（初始为空提示）
+  function pOutput(){
+    return '<div class="p-stage"><div class="empty">连接抠图 / 色板 / 文案 / 纹理后<br>点「合成」生成手幅</div></div>';
+  }
+
+  const nodes=[];  // 初始空白画布：卡片由用户从左侧导航添加
+
+  const edges=[];  // 连线由用户手动创建
+
+  /* —— 建节点（可复用，运行时新增节点也走这里）—— */
+  function buildNodeEl(n){
+    const el=document.createElement("div");
+    el.className="node";el.dataset.id=n.id;
+    el.style.left=n.x+"px";el.style.top=n.y+"px";el.style.width=n.w+"px";
+    el.innerHTML=
+      '<span class="screw tl"></span><span class="screw tr"></span><span class="screw bl"></span><span class="screw br"></span>'+
+      '<span class="port in"></span><span class="port out"></span>'+
+      '<span class="lockbadge"><svg viewBox="0 0 24 24"><rect x="5" y="10.5" width="14" height="9.5" rx="1.5"/><path d="M8 10.5 V7.5 A4 4 0 0 1 16 7.5 V10.5"/></svg></span>'+
+      `<div class="head"><span class="led"></span><span class="idx">${n.idx}</span><span class="name">${n.name}</span><span class="meta">${n.meta}</span></div>`+
+      `<div class="screen-in"><div class="body">${n.body}</div></div>`+
+      `<div class="foot"><span>${n.foot[0]}</span><span>${n.foot[1]}</span></div>`;
+    world.appendChild(el);
+    n._el=el;
+    return el;
+  }
+  for(const n of nodes) buildNodeEl(n);
+  function nodeById(id){return nodes.find(n=>n.id===id)}
+
+  // 运行时新增节点
+  let idSeq=0;
+  function makeId(prefix){return prefix+"-new-"+(++idSeq);}
+  function createNode(opts){
+    const n=Object.assign({x:0,y:0,w:220,idx:"N-00",name:"节点",meta:"NODE",foot:["",""],body:""},opts);
+    if(!n.id) n.id=makeId(n._kind||"node");   // 必须有唯一 id，否则无法选中/拖动
+    nodes.push(n);
+    buildNodeEl(n);
+    if(typeof addLayerRow==="function") addLayerRow(n,true);
+    if(typeof refreshEmptyHint==="function") refreshEmptyHint();
+    return n;
+  }
+
+  /* ========================================================= */
+  /* ==============  撤销/重做 · 历史栈  ==================== */
+  /* ========================================================= */
+  const history=[], future=[];      // history: 过去态；future: 重做态
+  const HIST_MAX=80;
+  function snapshot(){
+    return nodes.map(n=>({id:n.id,x:n.x,y:n.y,g:n._group||null,lk:!!n._locked,hd:!!n._hidden,z:n._el.style.zIndex||""}));
+  }
+  function restore(snap){
+    for(const st of snap){
+      const n=nodeById(st.id); if(!n) continue;
+      n.x=st.x;n.y=st.y;n._group=st.g;n._locked=st.lk;n._hidden=st.hd;
+      n._el.style.left=n.x+"px";n._el.style.top=n.y+"px";
+      n._el.style.display=n._hidden?"none":"";
+      n._el.style.zIndex=st.z;
+    }
+    applySelStyles(); syncLayerRows(); updateWires();
+  }
+  let preState=null;                 // 一次操作前的快照
+  // 在改动前调用：登记起始态
+  function beginHistory(){ preState=snapshot(); }
+  // 改动后调用：把起始态压入历史
+  function pushHistory(){
+    history.push(preState||snapshot());
+    if(history.length>HIST_MAX) history.shift();
+    future.length=0; preState=null; refreshHistBtns();
+    scheduleSave();
+  }
+  // 记录一次即时操作（先存态、执行、压栈）
+  function commit(fn){ beginHistory(); fn(); pushHistory(); }
+  // 结构性操作（如新增/删除卡片、连线）用可逆闭包入栈，与位置快照共用同一撤销栈
+  function pushAction(undoFn,redoFn){
+    history.push({undo:undoFn,redo:redoFn});
+    if(history.length>HIST_MAX) history.shift();
+    future.length=0; preState=null; refreshHistBtns();
+    scheduleSave();
+  }
+  function undo(){
+    if(!history.length) return;
+    const entry=history[history.length-1];
+    if(entry && typeof entry.undo==="function"){ history.pop(); entry.undo(); future.push(entry); }
+    else { future.push(snapshot()); restore(history.pop()); }
+    refreshHistBtns(); scheduleSave();
+  }
+  function redo(){
+    if(!future.length) return;
+    const entry=future[future.length-1];
+    if(entry && typeof entry.redo==="function"){ future.pop(); entry.redo(); history.push(entry); }
+    else { history.push(snapshot()); restore(future.pop()); }
+    refreshHistBtns(); scheduleSave();
+  }
+  function refreshHistBtns(){
+    const u=document.getElementById("btnUndo"), r=document.getElementById("btnRedo");
+    if(u) u.classList.toggle("disabled", !history.length);
+    if(r) r.classList.toggle("disabled", !future.length);
+  }
+
+  /* —— 连接层 · 磁力场线：命中区 + 场线 + 流动层 + 双端锚点 —— */
+  let selEdge=null;
+
+  const edgeEls=[];
+  function addEdge(from,to){
+    if(edgeEls.some(e=>e.from===from&&e.to===to)) return null;
+    const g=document.createElementNS(SVGNS,"g");
+    g.setAttribute("class","g");
+    const hit=document.createElementNS(SVGNS,"path");   hit.setAttribute("class","hit");
+    const field=document.createElementNS(SVGNS,"path"); field.setAttribute("class","field");
+    const flow=document.createElementNS(SVGNS,"path");  flow.setAttribute("class","flow");
+    const aSrc=document.createElementNS(SVGNS,"rect");  aSrc.setAttribute("class","a-src");
+    aSrc.setAttribute("width","5.4");aSrc.setAttribute("height","5.4");aSrc.setAttribute("rx","1");
+    const aDst=document.createElementNS(SVGNS,"circle");aDst.setAttribute("class","a-dst");aDst.setAttribute("r","3.4");
+    const aCore=document.createElementNS(SVGNS,"circle");aCore.setAttribute("class","a-core");aCore.setAttribute("r","1.5");
+    g.append(hit,field,flow,aSrc,aDst,aCore);
+    wires.appendChild(g);
+    const e={from,to,g,hit,field,flow,aSrc,aDst,aCore};
+    hit.addEventListener("pointerenter",()=>{if(selEdge!==e)g.classList.add("hover")});
+    hit.addEventListener("pointerleave",()=>g.classList.remove("hover"));
+    hit.addEventListener("pointerdown",(ev)=>{ev.stopPropagation();selectEdge(e)});
+    edgeEls.push(e);
+    return e;
+  }
+  edges.forEach(([from,to])=>addEdge(from,to));
+
+  // 移除一条连线（DOM + 数据），可被删除卡片/断开操作复用
+  function removeEdge(e){
+    if(!e) return;
+    if(selEdge===e){ selEdge=null; clearLinkedNodes(); }
+    if(e.g && e.g.parentNode) e.g.parentNode.removeChild(e.g);
+    const i=edgeEls.indexOf(e); if(i>=0) edgeEls.splice(i,1);
+  }
+
+  function clearLinkedNodes(){for(const n of nodes) n._el.classList.remove("linked");}
+  function markLinkedNodes(e){
+    clearLinkedNodes();
+    const a=nodeById(e.from), b=nodeById(e.to);
+    if(a) a._el.classList.add("linked");
+    if(b) b._el.classList.add("linked");
+  }
+  function selectEdge(e){
+    if(selEdge) selEdge.g.classList.remove("sel");
+    if(selEdge===e){selEdge=null;clearLinkedNodes();return;}
+    selEdge=e; e.g.classList.remove("hover"); e.g.classList.add("sel");
+    markLinkedNodes(e);
+  }
+  function clearEdgeSel(){
+    if(selEdge){selEdge.g.classList.remove("sel");selEdge=null;}
+    clearLinkedNodes();
+  }
+
+  // 端点几何 + 场强/矢量计算
+  function edgeGeom(e){
+    const a=nodeById(e.from),b=nodeById(e.to);
+    const aw=a._el.offsetWidth, ah=a._el.offsetHeight, bh=b._el.offsetHeight;
+    const ax=a.x+aw-1, ay=a.y+ah/2;
+    const bx=b.x+1,    by=b.y+bh/2;
+    return {a,b,ax,ay,bx,by};
+  }
+
+  function updateWires(){
+    for(const e of edgeEls){
+      const {ax,ay,bx,by}=edgeGeom(e);
+      const off=Math.max(50,(bx-ax)*0.5);
+      const d=`M ${ax} ${ay} C ${ax+off} ${ay}, ${bx-off} ${by}, ${bx} ${by}`;
+      e.hit.setAttribute("d",d);e.field.setAttribute("d",d);e.flow.setAttribute("d",d);
+      e.aSrc.setAttribute("x",ax-2.7);e.aSrc.setAttribute("y",ay-2.7);
+      e.aDst.setAttribute("cx",bx);e.aDst.setAttribute("cy",by);
+      e.aCore.setAttribute("cx",bx);e.aCore.setAttribute("cy",by);
+    }
+  }
+
+  // 节点 OUT / IN 端口在 world 坐标中的位置（用于拉线起止点）
+  function portPos(n,which){
+    const w=n._el.offsetWidth, h=n._el.offsetHeight;
+    return which==="out" ? {x:n.x+w-1, y:n.y+h/2} : {x:n.x+1, y:n.y+h/2};
+  }
+  // 临时拉线的 ghost 路径（一次性创建，复用）
+  const ghostPath=document.createElementNS(SVGNS,"path");
+  ghostPath.setAttribute("class","ghost");
+  ghostPath.style.display="none";
+  wires.appendChild(ghostPath);
+  function drawGhost(sx,sy,tx,ty){
+    const off=Math.max(50,Math.abs(tx-sx)*0.5);
+    ghostPath.setAttribute("d",`M ${sx} ${sy} C ${sx+off} ${sy}, ${tx-off} ${ty}, ${tx} ${ty}`);
+    ghostPath.style.display="";
+  }
+  function hideGhost(){ ghostPath.style.display="none"; }
+
+  /* —— 相机 —— */
+  function applyTransform(){
+    world.style.transform=`translate(${panX}px,${panY}px) scale(${scale})`;
+    const fine=UNIT*scale, bold=UNIT*5*scale;
+    gridEl.style.backgroundSize=
+      `${bold}px ${bold}px, ${bold}px ${bold}px, ${fine}px ${fine}px, ${fine}px ${fine}px`;
+    gridEl.style.backgroundPosition=
+      `${panX}px ${panY}px, ${panX}px ${panY}px, ${panX}px ${panY}px, ${panX}px ${panY}px`;
+    zoomLabel.textContent=Math.round(scale*100)+"%";
+    drawRulers();
+  }
+
+  function drawRulers(){
+    const step=UNIT*scale;
+    let per=1; while(step*per<58) per*=2;
+    const major=step*per;
+    const w=screenEl.clientWidth-RW-DOCK, h=screenEl.clientHeight-RW;
+    let html="";
+    let firstUnit=Math.floor(Math.ceil((0-panX)/step)/per)*per;
+    for(let u=firstUnit;;u+=per){
+      const px=panX+u*step-RW-DOCK;
+      if(px>w) break;
+      if(px>=-40){
+        html+=`<span class="tick major" style="left:${px}px"></span>`;
+        html+=`<span class="tickLabel" style="left:${px}px">${u}</span>`;
+        for(let m=1;m<4;m++){const mpx=px+major*m/4;if(mpx>=0&&mpx<=w)html+=`<span class="tick minor" style="left:${mpx}px"></span>`;}
+      }
+    }
+    rulerTop.innerHTML=html;
+    html="";
+    let firstV=Math.floor(Math.ceil((0-panY)/step)/per)*per;
+    for(let u=firstV;;u+=per){
+      const py=panY+u*step-RW;
+      if(py>h) break;
+      if(py>=-40){
+        html+=`<span class="tick major" style="top:${py}px"></span>`;
+        html+=`<span class="tickLabel" style="top:${py}px">${u}</span>`;
+        for(let m=1;m<4;m++){const mpy=py+major*m/4;if(mpy>=0&&mpy<=h)html+=`<span class="tick minor" style="top:${mpy}px"></span>`;}
+      }
+    }
+    rulerLeft.innerHTML=html;
+  }
+
+  function zoomAt(cx,cy,factor){
+    const next=Math.min(MAX,Math.max(MIN,scale*factor));
+    if(next===scale) return;
+    const rect=screenEl.getBoundingClientRect();
+    const x=cx-rect.left, y=cy-rect.top;
+    const wx=(x-panX)/scale, wy=(y-panY)/scale;
+    scale=next; panX=x-wx*scale; panY=y-wy*scale; applyTransform();
+  }
+
+  /* —— 选择模型：多选 + 主选 + 锁定 + 编组 —— */
+  const selection=new Set();      // 选中的 node id
+  let primaryId=null;             // 主选（对齐基准）
+  function applySelStyles(){
+    for(const n of nodes){
+      n._el.classList.toggle("active", selection.has(n.id));
+      n._el.classList.toggle("primary", n.id===primaryId);
+      n._el.classList.toggle("locked", !!n._locked);
+    }
+    syncLayerSelection();
+  }
+  function selectOnly(id){selection.clear(); if(id){selection.add(id); primaryId=id;} else primaryId=null; applySelStyles();}
+  function toggleSel(id){ if(selection.has(id)){selection.delete(id); if(primaryId===id) primaryId=[...selection].pop()||null;} else {selection.add(id); primaryId=id;} applySelStyles(); }
+  function clearSel(){selection.clear();primaryId=null;applySelStyles();}
+
+  /* —— 删除卡片：连同其连线一并移除，可撤销 —— */
+  function deleteNodes(ids){
+    const targets=ids.map(nodeById).filter(Boolean);
+    if(!targets.length) return;
+    // 捕获被删卡片的完整状态 + 关联连线，供撤销时精确还原
+    const removedNodes=targets.map(n=>({
+      node:n,
+      index:nodes.indexOf(n),
+      rowNext:n._layerRow?n._layerRow.nextSibling:null,
+      row:n._layerRow||null,
+    }));
+    const idSet=new Set(targets.map(n=>n.id));
+    const removedEdges=edgeEls.filter(e=>idSet.has(e.from)||idSet.has(e.to))
+      .map(e=>({from:e.from,to:e.to}));
+
+    const doRemove=()=>{
+      // 先拆连线（用 from/to 定位当前实例）
+      for(const re of removedEdges){
+        const e=edgeEls.find(x=>x.from===re.from&&x.to===re.to);
+        if(e) removeEdge(e);
+      }
+      for(const rn of removedNodes){
+        const n=rn.node;
+        if(n._el&&n._el.parentNode) n._el.parentNode.removeChild(n._el);
+        if(n._layerRow&&n._layerRow.parentNode) n._layerRow.parentNode.removeChild(n._layerRow);
+        const i=nodes.indexOf(n); if(i>=0) nodes.splice(i,1);
+        selection.delete(n.id);
+      }
+      if(primaryId&&idSet.has(primaryId)) primaryId=[...selection].pop()||null;
+      applySelStyles(); updateWires(); refreshEmptyHint();
+    };
+    const doRestore=()=>{
+      // 还原节点（按原索引回插数据 + DOM + 图层行）
+      const byIndex=[...removedNodes].sort((a,b)=>a.index-b.index);
+      for(const rn of byIndex){
+        const n=rn.node;
+        const at=Math.min(rn.index,nodes.length);
+        nodes.splice(at,0,n);
+        world.appendChild(n._el);
+        if(rn.row){
+          if(rn.rowNext&&rn.rowNext.parentNode===lpScroll) lpScroll.insertBefore(rn.row,rn.rowNext);
+          else lpScroll.appendChild(rn.row);
+        }
+      }
+      // 还原连线
+      for(const re of removedEdges) addEdge(re.from,re.to);
+      updateWires(); refreshEmptyHint(); applySelStyles();
+    };
+
+    doRemove();
+    pushAction(doRestore,doRemove);
+  }
+  function deleteSelection(){
+    const ids=[...selection].filter(id=>{ const n=nodeById(id); return n&&!n._locked; });
+    if(!ids.length) return false;
+    deleteNodes(ids);
+    return true;
+  }
+
+  // 兼容旧调用（图层面板）：按元素单选
+  function setActive(el){ selectOnly(el?el.dataset.id:null); }
+  function syncLayerSelection(){
+    const box=document.getElementById("lpScroll");
+    if(!box) return;
+    for(const r of box.children) r.classList.toggle("active", selection.has(r.dataset.id));
+  }
+  function groupMembers(gid){return nodes.filter(n=>n._group===gid);}
+
+  /* —— 交互：拖卡片 or 平移 —— */
+  let mode=null, start=null;
+  screenEl.addEventListener("pointerdown",(e)=>{
+    // UI 外壳（左坞/右栏/顶栏/缩放控件）上的交互不参与画布拖拽，且不能抢占指针
+    if(e.target.closest("#dock,#rail,#controls,#topbar,#nav")){ return; }
+    // 从卡片右侧 OUT 端口按下 => 直接进入"拉线"模式（拖拽连线，最直观）
+    const portOut=e.target.closest(".port.out");
+    if(portOut){
+      const srcEl=portOut.closest(".node"); const src=nodeById(srcEl.dataset.id);
+      if(src){
+        e.stopPropagation();
+        clearEdgeSel();
+        mode="wire";
+        const sp=portPos(src,"out");
+        start={src, sx:sp.x, sy:sp.y, target:null};
+        srcEl.classList.add("wire-source");
+        screenEl.classList.add("wiring");
+        const w0=screenToWorld(e.clientX,e.clientY);
+        drawGhost(sp.x,sp.y,w0.x,w0.y);
+        screenEl.setPointerCapture(e.pointerId);
+        return;
+      }
+    }
+    // 节点内交互元素（按钮/可编辑便签）不触发拖拽
+    if(e.target.closest(".act,.p-note-edit,.lp-eye,.p-upload,.p-anno [contenteditable],.p-anno select,.p-spec select,.p-texgrid,.enlarge,.cardDel")){ return; }
+    const nodeEl=e.target.closest(".node");
+    if(nodeEl){
+      const n=nodeById(nodeEl.dataset.id);
+      clearEdgeSel();
+      if(e.shiftKey){ toggleSel(n.id); }
+      else if(!selection.has(n.id)){ selectOnly(n.id); }
+      else { primaryId=n.id; applySelStyles(); }
+      if(n._locked){ mode=null; screenEl.setPointerCapture(e.pointerId); return; }
+      // 计算跟随移动的集合：编组联动 + 当前多选
+      let moving=new Set(selection);
+      if(n._group) groupMembers(n._group).forEach(m=>moving.add(m.id));
+      moving=[...moving].map(nodeById).filter(m=>m&&!m._locked);
+      if(!moving.length) moving=[n];
+      mode="node"; beginHistory();
+      start={x:e.clientX,y:e.clientY,items:moving.map(m=>({node:m,ox:m.x,oy:m.y})),el:nodeEl,moved:false};
+      nodeEl.classList.add("dragging");
+      world.appendChild(nodeEl);
+    }else{
+      clearSel();clearEdgeSel();
+      mode="pan";
+      start={x:e.clientX,y:e.clientY,px:panX,py:panY};
+      screenEl.classList.add("panning");
+    }
+    screenEl.setPointerCapture(e.pointerId);
+  });
+  screenEl.addEventListener("pointermove",(e)=>{
+    if(!mode) return;
+    if(mode==="wire"){
+      const w=screenToWorld(e.clientX,e.clientY);
+      // 用鼠标真实坐标探测下方卡片：因为按下端口时做了 setPointerCapture，
+      // e.target 会被固定成画布本身，必须用 elementFromPoint 才能识别目标卡片
+      const under=document.elementFromPoint(e.clientX,e.clientY);
+      const overEl=under?under.closest(".node"):null;
+      let tx=w.x, ty=w.y;
+      const prev=start.target;
+      let tgt=null;
+      if(overEl){
+        const t=nodeById(overEl.dataset.id);
+        if(t && t!==start.src){ tgt=t; const ip=portPos(t,"in"); tx=ip.x; ty=ip.y; }
+      }
+      if(prev && prev!==tgt) prev._el.classList.remove("wire-target");
+      if(tgt) tgt._el.classList.add("wire-target");
+      start.target=tgt;
+      drawGhost(start.sx,start.sy,tx,ty);
+      return;
+    }
+    if(mode==="pan"){
+      panX=start.px+(e.clientX-start.x); panY=start.py+(e.clientY-start.y); applyTransform();
+    }else{
+      const dx=(e.clientX-start.x)/scale, dy=(e.clientY-start.y)/scale;
+      if(Math.abs(e.clientX-start.x)+Math.abs(e.clientY-start.y)>2) start.moved=true;
+      for(const it of start.items){
+        it.node.x=it.ox+dx; it.node.y=it.oy+dy;
+        it.node._el.style.left=it.node.x+"px"; it.node._el.style.top=it.node.y+"px";
+      }
+      updateWires();
+    }
+  });
+  function endInteraction(){
+    if(mode==="wire"&&start){
+      hideGhost();
+      if(start.src&&start.src._el) start.src._el.classList.remove("wire-source");
+      if(start.target&&start.target._el) start.target._el.classList.remove("wire-target");
+      screenEl.classList.remove("wiring");
+      const src=start.src, tgt=start.target;
+      if(src&&tgt&&src!==tgt){
+        const before=edgeEls.length;
+        const ne=addEdge(src.id,tgt.id); updateWires();
+        if(ne){
+          const from=src.id, to=tgt.id;
+          const back=()=>{ const x=edgeEls.find(y=>y.from===from&&y.to===to); if(x) removeEdge(x); updateWires(); };
+          const fwd=()=>{ addEdge(from,to); updateWires(); };
+          pushAction(back,fwd);
+          selectEdge(ne);
+        }
+      }
+      mode=null;start=null;
+      return;
+    }
+    if(mode==="node"&&start){ start.el.classList.remove("dragging"); if(start.moved) pushHistory(); }
+    mode=null;start=null;screenEl.classList.remove("panning");
+  }
+  screenEl.addEventListener("pointerup",endInteraction);
+  screenEl.addEventListener("pointercancel",endInteraction);
+  screenEl.addEventListener("wheel",(e)=>{e.preventDefault();zoomAt(e.clientX,e.clientY,e.deltaY<0?1.08:1/1.08)},{passive:false});
+
+  const cx=()=>screenEl.getBoundingClientRect().left+screenEl.clientWidth/2;
+  const cy=()=>screenEl.getBoundingClientRect().top+screenEl.clientHeight/2;
+  document.getElementById("zoomIn").onclick=()=>zoomAt(cx(),cy(),1.15);
+  document.getElementById("zoomOut").onclick=()=>zoomAt(cx(),cy(),1/1.15);
+  document.getElementById("reset").onclick=()=>{panX=DOCK+RW+40;panY=RW+40;scale=1;applyTransform()};
+
+  /* ========================================================= */
+  /* ===========  左侧主工具栏 · 线性图标系统  ============== */
+  /* ========================================================= */
+  // 统一线性描边图标（左侧导航：SELECT / CONNECT + 七种卡片 A-G）
+  const ICONS={
+    select:'<path d="M5 3 L5 17 L9 13 L11.5 18.5 L13.5 17.5 L11 12 L16 12 Z"/>',
+    connect:'<circle cx="5.5" cy="5.5" r="2.2"/><circle cx="18.5" cy="18.5" r="2.2"/><path d="M7.4 7.4 C 13 9, 15 11, 16.6 16.6"/>',
+    image:'<rect x="3.5" y="4.5" width="17" height="15" rx="1.5"/><circle cx="8.5" cy="9.5" r="1.6"/><path d="M4 17 L9.5 12 L13 15 L16 12.5 L20 16.5"/>',
+    reference:'<rect x="4.5" y="3.5" width="12" height="16" rx="1.5"/><path d="M19 8 v11 M19 8 h1.5 M19 12 h1.5 M19 16 h1.5"/>',
+    cutout:'<path d="M6 4 v16 M6 8 l-2.5 -2.5 M6 8 l2.5 -2.5"/><circle cx="15" cy="15" r="3.5"/><path d="M9 6 h9 v9" stroke-dasharray="2.5 2.2"/>',
+    palette:'<circle cx="12" cy="12" r="8.5"/><circle cx="9" cy="9" r="1.3"/><circle cx="15" cy="9" r="1.3"/><circle cx="15.5" cy="13" r="1.3"/><circle cx="10" cy="15.5" r="1.3"/>',
+    text:'<path d="M5 6 V4.5 H19 V6 M12 4.5 V19.5 M9 19.5 H15"/>',
+    template:'<rect x="3.5" y="3.5" width="17" height="17" rx="1.5"/><path d="M3.5 9 H20.5 M9 9 V20.5"/><path d="M13 13 H17.5 M13 16 H17.5" stroke-dasharray="1.5 1.6"/>',
+    output:'<rect x="3.5" y="5" width="17" height="14" rx="1.5"/><path d="M3.5 15 L9 10 L13 13 L16 11 L20.5 15"/>',
+  };
+
+  /* —— 卡片类型注册表（A–G）—— */
+  // code 字母对应用户约定；kind 内部标识；canEnlarge 决定是否可全屏细化编辑
+  const CARDS={
+    image:    {code:"A", name:"上传图片",   meta:"IMAGE",     en:"IMAGE",     w:232, canEnlarge:true },
+    reference:{code:"B", name:"设计参考图", meta:"REFERENCE", en:"REFERENCE", w:236, canEnlarge:true },
+    cutout:   {code:"C", name:"抠图",       meta:"CUTOUT",    en:"CUTOUT",    w:212, canEnlarge:true },
+    palette:  {code:"D", name:"取色",       meta:"PALETTE",   en:"PALETTE",   w:212, canEnlarge:true },
+    text:     {code:"E", name:"文字",       meta:"TEXT",      en:"TEXT",      w:212, canEnlarge:true },
+    template: {code:"F", name:"物料类型",   meta:"TEMPLATE",  en:"TEMPLATE",  w:224, canEnlarge:true },
+    output:   {code:"G", name:"拼接画布",   meta:"OUTPUT",    en:"OUTPUT",    w:258, canEnlarge:true },
+  };
+  const seqByKind={};
+  function nextIdx(kind){ const c=CARDS[kind].code; seqByKind[kind]=(seqByKind[kind]||0)+1; return c+"-"+String(seqByKind[kind]).padStart(2,"0"); }
+
+  // 左侧导航：模式工具 + 七类卡片
+  const TOOLS=[
+    {id:"select",  name:"选择", en:"SELECT", mode:true},
+    {id:"connect", name:"连接", en:"CONNECT", mode:true, sep:true},
+    {id:"image",     name:"上传图片",   en:"IMAGE",     card:true},
+    {id:"reference", name:"设计参考图", en:"REFERENCE", card:true},
+    {id:"cutout",    name:"抠图",       en:"CUTOUT",    card:true},
+    {id:"palette",   name:"取色",       en:"PALETTE",   card:true},
+    {id:"text",      name:"文字",       en:"TEXT",      card:true},
+    {id:"template",  name:"物料类型",   en:"TEMPLATE",  card:true},
+    {id:"output",    name:"拼接画布",   en:"OUTPUT",    card:true},
+  ];
+  const toolbar=document.getElementById("toolbar");
+  const toolBtns={};
+  let activeTool="select";
+  for(const t of TOOLS){
+    const b=document.createElement("button");
+    b.className="tool"+(t.sep?" sep":"")+(t.id===activeTool?" active":"");
+    b.dataset.tool=t.id;
+    b.title=`${t.name} / ${t.en}`;
+    b.innerHTML=`<svg viewBox="0 0 24 24" aria-hidden="true">${ICONS[t.id]}</svg><span class="lbl">${t.en}</span>`;
+    b.addEventListener("click",()=>{
+      if(t.mode){
+        toolbar.querySelectorAll(".tool").forEach(x=>x.classList.remove("active"));
+        b.classList.add("active"); activeTool=t.id;
+        setConnectMode(t.id==="connect");
+      }else if(t.card){
+        flashBtn(b);
+        addCard(t.id);
+      }
+    });
+    toolbar.appendChild(b); toolBtns[t.id]=b;
+  }
+
+  /* ========================================================= */
+  /* ==============  卡片工厂 · addCard(kind)  ============== */
+  /* ========================================================= */
+  function blankBody(kind){
+    switch(kind){
+      case "image":
+      case "reference": return '<div class="p-photo"></div>';
+      case "cutout":    return '<div class="p-photo alpha"></div>';
+      case "palette":   return '<div class="p-pal"><div class="empty" style="padding:14px 6px;color:var(--phos-dim);font-size:8.5px;letter-spacing:.1em;text-transform:uppercase">连接图片后点取色</div></div>';
+      case "text":      return pAnno();
+      case "template":  return pTemplate();
+      case "output":    return pOutput();
+      default:          return '';
+    }
+  }
+  function addCard(kind,at){
+    const meta=CARDS[kind];
+    const p=at||spawnPoint();
+    const n=createNode({x:p.x,y:p.y,w:meta.w,idx:nextIdx(kind),name:meta.name,meta:meta.meta,
+      foot:["新建",meta.en.split(" ").pop()],body:blankBody(kind)});
+    n._kind=kind;
+    const body=n._el.querySelector(".body"); body.style.position="relative";
+    // 各类初始化
+    if(kind==="image"||kind==="reference"){
+      body.insertAdjacentHTML("beforeend",uploadOverlayHTML(n)); wireUploadOverlay(n);
+    }else if(kind==="text"){ wireAnnoNode(n); }
+    else if(kind==="template"){ wireTemplateNode(n); }
+    else if(kind==="output"){ wireOutputNode(n); }
+    else if(kind==="cutout"){ wireCutoutTarget(n); }
+    else if(kind==="palette"){ wirePaletteTarget(n); }
+    if(meta.canEnlarge){ n._el.classList.add("has-enlarge"); addEnlargeBtn(n); }
+    addCardDelBtn(n);
+    commit(()=>{});
+    selectOnly(n.id);
+    return n;
+  }
+
+  // 抠图/取色卡片作为“接收端”：提供从上游图片拉取并处理的入口
+  function wireCutoutTarget(n){
+    n._canMatte=false;
+    const foot=n._el.querySelector(".foot");
+    const bar=document.createElement("div"); bar.className="acts";
+    bar.innerHTML=`<button class="act" data-do="pull-matte" title="从上游图片抠图"><svg viewBox="0 0 24 24"><path d="M4 4 h16 v16 h-16 z" stroke-dasharray="2.5 2.4"/><path d="M9 15 l3-4 3 4"/></svg>抠图</button>`;
+    n._el.insertBefore(bar,foot);
+    bar.querySelector("[data-do=pull-matte]").addEventListener("click",(e)=>{e.stopPropagation();pullAndProcess(n,"matte");});
+  }
+  function wirePaletteTarget(n){
+    const foot=n._el.querySelector(".foot");
+    const bar=document.createElement("div"); bar.className="acts";
+    bar.innerHTML=`<button class="act" data-do="pull-palette" title="从上游图片取色"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><circle cx="9" cy="9" r="1.3"/><circle cx="15" cy="9" r="1.3"/></svg>取色</button>`;
+    n._el.insertBefore(bar,foot);
+    bar.querySelector("[data-do=pull-palette]").addEventListener("click",(e)=>{e.stopPropagation();pullAndProcess(n,"palette");});
+  }
+  // 找到连到本卡片(上游)的最近图片源节点
+  function upstreamImage(n){
+    for(const e of edgeEls){ if(e.to===n.id){ const src=nodeById(e.from); if(src&&src._src) return src; } }
+    return null;
+  }
+  // 收集本卡片所有上游图片源里的全部图（展开多图）
+  function upstreamAllImages(n){
+    const out=[];
+    for(const e of edgeEls){ if(e.to===n.id){ const src=nodeById(e.from);
+      if(src){ const imgs=(src._images&&src._images.length)?src._images:(src._src?[src._src]:[]); out.push(...imgs); } } }
+    return out;
+  }
+  async function pullAndProcess(n,op){
+    const imgs=upstreamAllImages(n);
+    if(!imgs.length){ nodeSetBusy(n,"请先连接图片"); setTimeout(()=>nodeClearBusy(n),1200); return; }
+    if(op==="matte"){
+      try{
+        const cutImgs=[];
+        for(let i=0;i<imgs.length;i++){
+          const pfx=imgs.length>1?`(${i+1}/${imgs.length}) `:"";
+          const parts=await matteToElements(imgs[i],msg=>nodeSetBusy(n,pfx+msg));
+          cutImgs.push(...parts);
+        }
+        loadImageIntoNode(n,cutImgs[0],{alpha:true,images:cutImgs}); n._canMatte=false;
+      }
+      catch(err){ console.warn(err); nodeSetBusy(n,"抠图失败"); setTimeout(()=>nodeClearBusy(n),1400); return; }
+      nodeClearBusy(n);
+    }else{
+      nodeSetBusy(n,"分析取色中");
+      try{ const cols=await extractPaletteFromMany(imgs,5);
+        n._el.querySelector(".body").innerHTML=paletteBodyHTML(cols); n._colors=cols;
+        n._el.querySelector(".foot").innerHTML="<span>自动取色</span><span>HEX</span>"; scheduleSave(); }
+      catch(err){ console.warn(err); }
+      nodeClearBusy(n);
+    }
+  }
+
+  /* ==========  左下图层面板 · SPECIMEN LAYERS  ============= */
+  /* ========================================================= */
+  // 眼睛图标：睁眼 / 闭眼
+  const EYE_OPEN='<path d="M2 12 C 5 6, 10 4, 12 4 C 14 4, 19 6, 22 12 C 19 18, 14 20, 12 20 C 10 20, 5 18, 2 12 Z"/><circle cx="12" cy="12" r="2.6"/>';
+  const EYE_OFF ='<path d="M3.5 8.5 C 6 12.5, 9 15, 12 15 C 15 15, 18 12.5, 20.5 8.5"/><path d="M12 15 V18 M6.5 13.8 L5 16 M17.5 13.8 L19 16"/><path d="M3 4 L21 20"/>';
+
+  const lpScroll=document.getElementById("lpScroll");
+  // 每类图层的色标（低饱和冷灰/板岩蓝）
+  const CHIP_BY_KIND={image:"#94a6c4",reference:"#5a6e8a",cutout:"#c3ccda",palette:"#9ea39a",text:"#8a96a8",template:"#4c5f7a",output:"#31476f",note:"#7286a3"};
+  // 图层顺序：新卡片插到列表顶部（见 addLayerRow prepend）
+
+  function setNodeVisible(n,vis){
+    n._hidden=!vis;
+    n._el.style.display=vis?"":"none";
+    updateWires();
+  }
+  function setLayerActive(id){
+    selectOnly(id);
+  }
+  // 让图层行的显隐/选中态与数据同步（撤销/重做后调用）
+  function syncLayerRows(){
+    for(const r of lpScroll.children){
+      const n=nodeById(r.dataset.id); if(!n) continue;
+      const hidden=!!n._hidden;
+      r.classList.toggle("hidden",hidden);
+      const eye=r.querySelector(".lp-eye svg");
+      if(eye) eye.innerHTML=hidden?EYE_OFF:EYE_OPEN;
+    }
+  }
+
+  // 建图层行（可复用；prepend=true 时插到顶部，供运行时新增节点）
+  function addLayerRow(n,prepend){
+    const row=document.createElement("div");
+    row.className="lp-row";row.dataset.id=n.id;
+    row.innerHTML=
+      `<span class="chip" style="background:${CHIP_BY_KIND[n._kind]||'#7286a3'}"></span>`+
+      `<span class="idx">${n.idx}</span>`+
+      `<span class="nm">${n.meta}</span>`+
+      `<button class="lp-eye" title="显隐"><svg viewBox="0 0 24 24">${EYE_OPEN}</svg></button>`;
+    const eye=row.querySelector(".lp-eye");
+    eye.addEventListener("click",(ev)=>{
+      ev.stopPropagation();
+      commit(()=>{
+        const hide=!row.classList.contains("hidden");
+        row.classList.toggle("hidden",hide);
+        eye.querySelector("svg").innerHTML=hide?EYE_OFF:EYE_OPEN;
+        setNodeVisible(n,!hide);
+      });
+    });
+    row.addEventListener("click",()=>setLayerActive(n.id));
+    if(prepend) lpScroll.insertBefore(row,lpScroll.firstChild);
+    else lpScroll.appendChild(row);
+    n._layerRow=row;
+    return row;
+  }
+
+  // 新增图层按钮（示意：复制主选卡片，稍作偏移）
+  const lpAddBtn=document.getElementById("lpAdd");
+  if(lpAddBtn) lpAddBtn.addEventListener("click",()=>{ flashBtn(lpAddBtn); });
+
+  // 底部视图切换
+  document.querySelectorAll("#layers .lp-view").forEach(btn=>{
+    btn.addEventListener("click",()=>{
+      document.querySelectorAll("#layers .lp-view").forEach(x=>x.classList.remove("active"));
+      btn.classList.add("active");
+    });
+  });
+
+  /* ========================================================= */
+  /* ==========  右侧操作栏 · RIGHT ACTION RAIL  ============ */
+  /* ========================================================= */
+  // 与左侧同一套线性描边图标系统，但用途是排布/层级/编组操作
+  const RAIL_ICONS={
+    lock:'<rect x="5" y="10.5" width="14" height="9.5" rx="1.5"/><path d="M8 10.5 V7.5 A4 4 0 0 1 16 7.5 V10.5"/><circle cx="12" cy="15" r="1.2"/>',
+    align:'<path d="M4 3 V21"/><rect x="7" y="6.5" width="11" height="4" rx="1"/><rect x="7" y="13.5" width="7" height="4" rx="1"/>',
+    distribute:'<path d="M3 4 H21 M3 20 H21"/><rect x="6.5" y="8.5" width="4" height="7" rx="1"/><rect x="13.5" y="8.5" width="4" height="7" rx="1"/>',
+    front:'<rect x="4" y="4" width="11" height="11" rx="1.5"/><rect x="9" y="9" width="11" height="11" rx="1.5" fill="var(--crt)"/>',
+    back:'<rect x="9" y="9" width="11" height="11" rx="1.5"/><rect x="4" y="4" width="11" height="11" rx="1.5" fill="var(--crt)"/>',
+    group:'<rect x="4.5" y="4.5" width="15" height="15" rx="1.5" stroke-dasharray="2.5 2.2"/><rect x="7.5" y="7.5" width="4.5" height="4.5"/><rect x="12" y="12" width="4.5" height="4.5"/>',
+    ungroup:'<rect x="4" y="4" width="9" height="9" rx="1"/><rect x="11" y="11" width="9" height="9" rx="1" stroke-dasharray="2.5 2.2"/>',
+    view:'<path d="M2 12 C 5 6, 10 4, 12 4 C 14 4, 19 6, 22 12 C 19 18, 14 20, 12 20 C 10 20, 5 18, 2 12 Z"/><circle cx="12" cy="12" r="2.6"/>',
+    trash:'<path d="M4 6.5 H20 M9 6.5 V4.5 H15 V6.5 M6.5 6.5 L7.5 20 H16.5 L17.5 6.5 M10 10 V16.5 M14 10 V16.5"/>',
+  };
+  const RAIL=[
+    {id:"lock",       name:"LOCK"},
+    {id:"align",      name:"ALIGN"},
+    {id:"distribute", name:"DISTRIBUTE"},
+    {id:"front",      name:"FRONT", sep:true},
+    {id:"back",       name:"BACK"},
+    {id:"group",      name:"GROUP", sep:true},
+    {id:"ungroup",    name:"UNGROUP"},
+    {id:"view",       name:"VIEW", sep:true},
+    {id:"trash",      name:"DELETE", sep:true},
+  ];
+  const rail=document.getElementById("rail");
+  const railBtns={};
+  for(const r of RAIL){
+    if(r.sep){const sp=document.createElement("div");sp.className="rail-sep";rail.appendChild(sp);}
+    const b=document.createElement("button");
+    b.className="rail-btn";b.dataset.act=r.id;b.title=r.name;
+    b.innerHTML=`<svg viewBox="0 0 24 24" aria-hidden="true">${RAIL_ICONS[r.id]}</svg><span class="lbl">${r.name}</span>`;
+    b.addEventListener("click",()=>railAction(r.id,b));
+    rail.appendChild(b); railBtns[r.id]=b;
+  }
+
+  /* —— 操作栏功能实现 —— */
+  function selNodes(){return [...selection].map(nodeById).filter(Boolean);}
+  function flashBtn(b){ if(!b)return; b.classList.add("flash"); setTimeout(()=>b.classList.remove("flash"),180); }
+  let groupSeq=0;
+
+  function railAction(id,btn){
+    const sel=selNodes();
+    switch(id){
+      case "lock":{
+        if(!sel.length){flashBtn(btn);break;}
+        commit(()=>{ const anyUnlocked=sel.some(n=>!n._locked); sel.forEach(n=>n._locked=anyUnlocked); });
+        applySelStyles();
+        break;
+      }
+      case "align":{ // 左对齐到主选（或最左）
+        const movable=sel.filter(n=>!n._locked);
+        if(movable.length<2){flashBtn(btn);break;}
+        const base=(primaryId&&nodeById(primaryId)&&!nodeById(primaryId)._locked)?nodeById(primaryId):movable.reduce((a,b)=>a.x<b.x?a:b);
+        commit(()=>{ movable.forEach(n=>{n.x=base.x; n._el.style.left=n.x+"px";}); });
+        updateWires();
+        break;
+      }
+      case "distribute":{ // 垂直等距分布
+        const movable=sel.filter(n=>!n._locked).sort((a,b)=>a.y-b.y);
+        if(movable.length<3){flashBtn(btn);break;}
+        const top=movable[0].y, bot=movable[movable.length-1].y, gap=(bot-top)/(movable.length-1);
+        commit(()=>{ movable.forEach((n,i)=>{n.y=top+gap*i; n._el.style.top=n.y+"px";}); });
+        updateWires();
+        break;
+      }
+      case "front":{
+        if(!sel.length){flashBtn(btn);break;}
+        commit(()=>{ sel.forEach(n=>{ world.appendChild(n._el); n._el.style.zIndex=++zTop; }); });
+        break;
+      }
+      case "back":{
+        if(!sel.length){flashBtn(btn);break;}
+        commit(()=>{ sel.forEach(n=>{ n._el.style.zIndex=--zBottom; }); });
+        break;
+      }
+      case "group":{
+        const movable=sel.filter(n=>!n._locked);
+        if(movable.length<2){flashBtn(btn);break;}
+        commit(()=>{ const gid="g"+(++groupSeq); movable.forEach(n=>n._group=gid); });
+        applySelStyles();
+        break;
+      }
+      case "ungroup":{
+        const grouped=sel.filter(n=>n._group);
+        if(!grouped.length){flashBtn(btn);break;}
+        commit(()=>{ grouped.forEach(n=>n._group=null); });
+        applySelStyles();
+        break;
+      }
+      case "view":{ // 缩放到选中/全部，居中
+        zoomToFit(sel.length?sel:nodes.filter(n=>!n._hidden));
+        break;
+      }
+      case "trash":{ // 删除选中卡片（锁定的会被跳过）
+        if(!deleteSelection()) flashBtn(btn);
+        break;
+      }
+    }
+  }
+
+  // z-index 计数
+  let zTop=10, zBottom=1;
+
+  // 缩放并平移，使给定节点集合恰好铺满可视画布
+  function zoomToFit(list){
+    if(!list.length) return;
+    let minx=Infinity,miny=Infinity,maxx=-Infinity,maxy=-Infinity;
+    for(const n of list){
+      const w=n._el.offsetWidth||220,h=n._el.offsetHeight||150;
+      minx=Math.min(minx,n.x);miny=Math.min(miny,n.y);
+      maxx=Math.max(maxx,n.x+w);maxy=Math.max(maxy,n.y+h);
+    }
+    const pad=60;
+    const vw=screenEl.clientWidth-DOCK-RW-RAILW-pad*2;
+    const vh=screenEl.clientHeight-RW-TOPH-pad*2;
+    const bw=maxx-minx, bh=maxy-miny;
+    let k=Math.min(vw/bw, vh/bh); k=Math.min(MAX,Math.max(MIN,k));
+    scale=k;
+    const cxw=(minx+maxx)/2, cyw=(miny+maxy)/2;
+    const vcx=DOCK+RW+(screenEl.clientWidth-DOCK-RW-RAILW)/2;
+    const vcy=TOPH+RW+(screenEl.clientHeight-RW-TOPH)/2;
+    panX=vcx-cxw*scale; panY=vcy-cyw*scale;
+    applyTransform();
+  }
+  const RAILW=58, TOPH=42;
+
+  /* —— 顶栏：撤销/重做 + AUTO-SAVE 走时 —— */
+  const btnUndo=document.getElementById("btnUndo");
+  const btnRedo=document.getElementById("btnRedo");
+  if(btnUndo) btnUndo.addEventListener("click",()=>{undo();flashBtn(btnUndo);});
+  if(btnRedo) btnRedo.addEventListener("click",()=>{redo();flashBtn(btnRedo);});
+  // 判断焦点是否在可编辑控件里（避免删卡片误删正在编辑的文字）
+  function isEditingContext(){
+    const a=document.activeElement;
+    if(!a) return false;
+    const tag=a.tagName;
+    return a.isContentEditable || tag==="INPUT" || tag==="TEXTAREA" || tag==="SELECT";
+  }
+  window.addEventListener("keydown",(e)=>{
+    if((e.metaKey||e.ctrlKey)&&e.key.toLowerCase()==="z"){ e.preventDefault(); if(e.shiftKey) redo(); else undo(); }
+    if((e.metaKey||e.ctrlKey)&&e.key.toLowerCase()==="y"){ e.preventDefault(); redo(); }
+    // Delete / Backspace：删除选中卡片或选中连线
+    if((e.key==="Delete"||e.key==="Backspace") && !isEditingContext() && !modal.classList.contains("on")){
+      if(selection.size){ e.preventDefault(); deleteSelection(); }
+      else if(selEdge){ e.preventDefault(); const re={from:selEdge.from,to:selEdge.to}; const kill=()=>{const x=edgeEls.find(y=>y.from===re.from&&y.to===re.to); if(x) removeEdge(x); updateWires();}; const back=()=>{ addEdge(re.from,re.to); updateWires(); }; kill(); pushAction(back,kill); }
+    }
+  });
+  refreshHistBtns();
+
+  // AUTO-SAVE 时间戳每秒走时
+  const saveEl=document.getElementById("saveTime");
+  function tickSave(){ if(!saveEl)return; const d=new Date();
+    const p=x=>String(x).padStart(2,"0");
+    saveEl.textContent=`${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`; }
+  setInterval(tickSave,1000); tickSave();
+
+  /* ========================================================= */
+  /* =====  产品功能 · 素材获取 / 抠图 / 素材分析  ========= */
+  /* ========================================================= */
+
+  // 世界坐标：把屏幕坐标映射到 world 空间
+  function screenToWorld(sx,sy){
+    const r=screenEl.getBoundingClientRect();
+    return { x:(sx-r.left-panX)/scale, y:(sy-r.top-panY)/scale };
+  }
+  // 在当前可视区域中心附近找一个落点（带轻微散开，避免叠死）
+  let _spawnJitter=0;
+  function spawnPoint(){
+    const vcx=DOCK+RW+(screenEl.clientWidth-DOCK-RW-58)/2;
+    const vcy=TOPH+RW+(screenEl.clientHeight-RW-TOPH)/2;
+    const w=screenToWorld(screenEl.getBoundingClientRect().left+vcx, screenEl.getBoundingClientRect().top+vcy);
+    const off=(_spawnJitter++%5)*26;
+    return { x:w.x-110+off, y:w.y-80+off };
+  }
+
+  const fileToDataURL=f=>new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(r.result);r.onerror=rej;r.readAsDataURL(f);});
+  const blobToDataURL=b=>new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(r.result);r.onerror=rej;r.readAsDataURL(b);});
+  const loadImage=src=>new Promise((res,rej)=>{const im=new Image();im.crossOrigin="anonymous";im.onload=()=>res(im);im.onerror=rej;im.src=src;});
+
+  /* ============================================================
+     按连通区域拆分抠图结果（参考「手幅工坊」的 splitByComponents）
+     去背景后，图里可能有多个独立元素（两个人、几件物品）。
+     这里做 8 邻接连通标记，把每个够大的不透明区域裁成独立透明 PNG。
+     - alpha：判为不透明的 alpha 阈值
+     - minRatio：区域面积占全图比例的下限（过滤碎点/噪声）
+     - maxPieces：最多拆出几块，避免碎裂过多
+     若只有一个连通块，返回原图（不拆）。
+     ============================================================ */
+  async function splitByComponents(src,{alpha=24,minRatio=0.004,maxPieces=12}={}){
+    const img=await loadImage(src),w=img.width,h=img.height;
+    const c=document.createElement("canvas");c.width=w;c.height=h;
+    const ctx=c.getContext("2d",{willReadFrequently:true});ctx.drawImage(img,0,0);
+    const data=ctx.getImageData(0,0,w,h).data;
+    const labels=new Int32Array(w*h).fill(-1);
+    const opaque=i=>data[i*4+3]>=alpha;const boxes=[];const st=[];let cur=0;
+    for(let p=0;p<w*h;p++){
+      if(labels[p]!==-1||!opaque(p))continue;
+      const box={minX:w,minY:h,maxX:0,maxY:0,area:0};st.length=0;st.push(p);labels[p]=cur;
+      while(st.length){const q=st.pop();const x=q%w,y=(q/w)|0;
+        if(x<box.minX)box.minX=x;if(y<box.minY)box.minY=y;if(x>box.maxX)box.maxX=x;if(y>box.maxY)box.maxY=y;box.area++;
+        for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++){if(!dx&&!dy)continue;const nx=x+dx,ny=y+dy;
+          if(nx<0||ny<0||nx>=w||ny>=h)continue;const nq=ny*w+nx;if(labels[nq]===-1&&opaque(nq)){labels[nq]=cur;st.push(nq)}}}
+      boxes.push(box);cur++;
+    }
+    const total=w*h;
+    const kept=boxes.map((b,id)=>({b,id})).filter(({b})=>b.area/total>=minRatio).sort((a,z)=>z.b.area-a.b.area).slice(0,maxPieces);
+    if(kept.length<=1)return[src];
+    const pad=2,out=[];
+    for(const{b,id}of kept){
+      const bx=Math.max(0,b.minX-pad),by=Math.max(0,b.minY-pad);
+      const bw=Math.min(w,b.maxX+pad)-bx+1,bh=Math.min(h,b.maxY+pad)-by+1;
+      const pc=document.createElement("canvas");pc.width=bw;pc.height=bh;
+      const pctx=pc.getContext("2d",{willReadFrequently:true});const reg=pctx.createImageData(bw,bh);
+      for(let y=0;y<bh;y++)for(let x=0;x<bw;x++){const sp=(by+y)*w+(bx+x),dp=(y*bw+x)*4;
+        if(labels[sp]===id){reg.data[dp]=data[sp*4];reg.data[dp+1]=data[sp*4+1];reg.data[dp+2]=data[sp*4+2];reg.data[dp+3]=data[sp*4+3]}}
+      pctx.putImageData(reg,0,0);out.push(pc.toDataURL("image/png"));
+    }
+    return out;
+  }
+  // 抠一张图 -> 去背（高清AI优先）-> 按元素拆分，返回该图产生的所有透明元素
+  async function matteToElements(src,onP){
+    const png=await smartMatte(src,onP);
+    try{ return await splitByComponents(png); }
+    catch(_){ return [png]; }
+  }
+
+  /* —— 单一隐藏 file input，按 _uploadTarget 决定灌到哪个节点 —— */
+  const fileInput=document.getElementById("fileInput");
+  let _uploadTarget=null;
+  // 点卡片上传：允许一次选多张，全部灌进这张卡片（追加到多图）
+  function pickImageInto(n){ _uploadTarget=n; fileInput.value=""; fileInput.multiple=true; fileInput.click(); }
+  function pickImageFiles(){ _uploadTarget=null; fileInput.value=""; fileInput.multiple=true; fileInput.click(); }
+  fileInput.addEventListener("change",async()=>{
+    const files=[...fileInput.files].filter(f=>f.type.startsWith("image/"));
+    if(!files.length) return;
+    if(_uploadTarget){
+      const n=_uploadTarget; _uploadTarget=null;
+      // 已有图则追加，空卡则第一张替换、其余追加
+      for(let i=0;i<files.length;i++){
+        const url=await fileToDataURL(files[i]);
+        const append = n._hasImg || i>0;
+        loadImageIntoNode(n,url,{append});
+      }
+    }
+    else { await ingestFiles(files); }
+  });
+
+  // 纹理上传：把自定义底纹灌进纹理节点样片
+  const texInput=document.getElementById("texInput");
+  let _texTarget=null;
+  texInput.addEventListener("change",async()=>{
+    const f=texInput.files[0]; if(!f||!_texTarget) return;
+    const url=await fileToDataURL(f);
+    const grid=_texTarget._el.querySelector(".p-texgrid");
+    grid.querySelectorAll(".tx").forEach(x=>x.classList.remove("on"));
+    const upCell=grid.querySelector('.tx.up');
+    upCell.style.cssText=`background:url(${url}) center/cover`;
+    upCell.classList.add("on"); upCell.innerHTML="";
+    _texTarget._tex={index:-1,preset:null,custom:url};
+    _texTarget=null;
+  });
+
+  let imgSeq=0;
+
+  /* ========================================================= */
+  /* ==========  给现有卡片赋能：上传 / 抠图 / 取色  ========= */
+  /* ========================================================= */
+  // 把一张图灌进指定节点（替换其屏内预览），并激活操作条
+  function loadImageIntoNode(n,dataURL,{alpha=false,append=false,images=null}={}){
+    // 图片 / 参考图 / 抠图 都支持多图：维护 _images 数组，卡片内显示网格 + 计数
+    const multiKind=(n._kind==="image"||n._kind==="reference"||n._kind==="cutout");
+    if(multiKind){
+      if(!n._images) n._images=[];
+      if(images) n._images=images.slice();       // 恢复存档 / 批量：整组还原
+      else if(append) n._images.push(dataURL);
+      else n._images=[dataURL];
+    }
+    n._src=dataURL; n._hasImg=true;
+    if(alpha!==undefined) n._alpha=alpha;         // 记住是否透明底，便于重绘
+    renderPhotoPreview(n);
+    refreshEmptyHint();
+    scheduleSave();
+  }
+  // 依 _images 渲染卡片内预览：单图铺满，多图 2×2 网格 + 计数
+  function renderPhotoPreview(n){
+    const alpha=!!n._alpha;
+    const imgs=(n._images&&n._images.length)?n._images:(n._src?[n._src]:[]);
+    const count=imgs.length;
+    const body=n._el.querySelector(".body"); if(!body) return;
+    let inner;
+    if(count<=1){
+      inner=`<img src="${imgs[0]||n._src}" alt="">`;
+    }else{
+      const show=imgs.slice(0,4);
+      inner=show.map(src=>`<div class="pg-cell"><img src="${src}" alt=""></div>`).join("")+
+            `<span class="pg-more">${count} 张</span>`;
+    }
+    const multiCls=count>1?" p-multi":"";
+    body.innerHTML=`<div class="p-photo${alpha?' alpha':''}${multiCls}">`+inner+uploadOverlayHTML(n)+`</div>`;
+    wireUploadOverlay(n);
+    refreshNodeActions(n);
+    const foot=n._el.querySelector(".foot");
+    if(foot) foot.innerHTML=`<span>${alpha?'透明 PNG':(count>1?count+' 张':'已导入')}</span><span>${alpha?'ALPHA':'READY'}</span>`;
+  }
+  // 上传浮层 HTML（空态常显，有图时 hover 才显）
+  function uploadOverlayHTML(n){
+    const empty=!n._hasImg;
+    return `<div class="p-upload${empty?' empty':''}" data-up="${n.id}">`+
+      `<span class="ic"><svg viewBox="0 0 24 24"><path d="M12 15 V5 M8 9 L12 5 L16 9"/><path d="M5 15 V19 A1.5 1.5 0 0 0 6.5 20.5 H17.5 A1.5 1.5 0 0 0 19 19 V15"/></svg></span>`+
+      `<span class="t">${empty?'上传照片':'更换照片'}</span>`+
+      (empty?`<span class="t sub">点击 / 拖拽 / 粘贴</span>`:``)+
+      `</div>`;
+  }
+  function wireUploadOverlay(n){
+    const up=n._el.querySelector(".p-upload");
+    if(up) up.addEventListener("click",(e)=>{e.stopPropagation();pickImageInto(n);});
+  }
+  // 根据节点是否有图，显示/隐藏「抠图 / 取色」操作条
+  function refreshNodeActions(n){
+    let bar=n._el.querySelector(".acts");
+    if(!n._hasImg){ if(bar) bar.remove(); return; }
+    if(bar) return;
+    const foot=n._el.querySelector(".foot");
+    bar=document.createElement("div");
+    bar.className="acts";
+    const btns=[];
+    if(n._canMatte!==false)
+      btns.push(`<button class="act" data-do="matte" title="AI 去背景"><svg viewBox="0 0 24 24"><path d="M4 4 h16 v16 h-16 z" stroke-dasharray="2.5 2.4"/><path d="M9 15 l3-4 3 4 M8.5 9.5 h.01"/></svg>抠图</button>`);
+    if(n._canPalette!==false)
+      btns.push(`<button class="act" data-do="palette" title="提取色板"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><circle cx="9" cy="9" r="1.3"/><circle cx="15" cy="9" r="1.3"/><circle cx="9.5" cy="15" r="1.3"/></svg>取色</button>`);
+    bar.innerHTML=btns.join("");
+    n._el.insertBefore(bar,foot);
+    const mb=bar.querySelector('[data-do=matte]'); if(mb) mb.addEventListener("click",(e)=>{e.stopPropagation();matteNode(n);});
+    const pb=bar.querySelector('[data-do=palette]'); if(pb) pb.addEventListener("click",(e)=>{e.stopPropagation();paletteNode(n);});
+  }
+
+  // 给种子卡片挂上「上传」入口（明星图/素材图/参考图可上传；抠图/色板是下游目标）
+  /* ========================================================= */
+  /* =========  文案 / 纹理 / 模板 / 合成 节点逻辑  ========= */
+  /* ========================================================= */
+  // 文案：读写可编辑内容 + 参数
+  function wireAnnoNode(n){
+    n._anno={text:"永远应援 · 生日快乐",tr:"Always by your side",font:"思源黑体",size:"72 pt",align:"居中"};
+    const line=n._el.querySelector(".p-anno .line"), tr=n._el.querySelector(".p-anno .tr");
+    line.addEventListener("input",()=>{n._anno.text=line.textContent;scheduleSave();});
+    tr.addEventListener("input",()=>{n._anno.tr=tr.textContent;scheduleSave();});
+    n._el.querySelectorAll(".p-anno select[data-anno]").forEach(sel=>{
+      sel.addEventListener("change",()=>{n._anno[sel.dataset.anno]=sel.value;scheduleSave();});
+      sel.addEventListener("pointerdown",e=>e.stopPropagation());
+    });
+  }
+  // 纹理：选择内置样片 / 上传底纹
+  function wireTextureNode(n){
+    n._tex={index:0,preset:TEX_PRESETS[0],custom:null};
+    const grid=n._el.querySelector(".p-texgrid");
+    grid.addEventListener("click",(e)=>{
+      const tx=e.target.closest(".tx"); if(!tx) return;
+      e.stopPropagation();
+      if(tx.dataset.tex==="up"){ pickTextureInto(n); return; }
+      grid.querySelectorAll(".tx").forEach(x=>x.classList.remove("on"));
+      tx.classList.add("on");
+      const i=+tx.dataset.tex; n._tex={index:i,preset:TEX_PRESETS[i],custom:null};
+      scheduleSave();
+    });
+  }
+  function pickTextureInto(n){ _texTarget=n; texInput.value=""; texInput.click(); }
+  // 模板：规格选择
+  function wireTemplateNode(n){
+    n._spec={sizeIdx:0,dpi:"300 DPI",mode:"CMYK"};
+    const rt=n._el.querySelector('[data-spec="rt"]');
+    n._el.querySelectorAll(".p-spec select").forEach(sel=>{
+      sel.addEventListener("pointerdown",e=>e.stopPropagation());
+      sel.addEventListener("change",()=>{
+        if(sel.dataset.spec==="size"){ n._spec.sizeIdx=+sel.value; rt.textContent=TPL_SIZES[+sel.value].mm; }
+        else if(sel.dataset.spec==="dpi"){ n._spec.dpi=sel.value; }
+        else if(sel.dataset.spec==="mode"){ n._spec.mode=sel.value; }
+        // 更新预览框比例
+        const box=n._el.querySelector(".p-spec .preview"), frm=box.querySelector(".frm");
+        const z=TPL_SIZES[n._spec.sizeIdx];
+        const maxW=box.clientWidth-12, maxH=box.clientHeight-12;
+        let w=maxW, h=w/z.ratio; if(h>maxH){h=maxH;w=h*z.ratio;}
+        frm.style.cssText=`position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:${w}px;height:${h}px;outline:1px dashed var(--proof)`;
+        scheduleSave();
+      });
+    });
+  }
+  // 合成：给输出卡片加「合成」操作按钮
+  function wireOutputNode(n){
+    const foot=n._el.querySelector(".foot");
+    const bar=document.createElement("div");
+    bar.className="acts";
+    bar.innerHTML=
+      `<button class="act" data-do="collage" title="打开拼贴编辑器"><svg viewBox="0 0 24 24"><rect x="3.5" y="4.5" width="17" height="15" rx="1.5"/><rect x="6" y="7" width="6" height="6" rx="1"/><path d="M13.5 8 H18 M13.5 11 H18 M6 16 H18"/></svg>拼贴排版</button>`+
+      `<button class="act" data-do="compose" title="自动合成一版"><svg viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="14" rx="1.5"/><path d="M3.5 15 L9 10 L13 13 L16 11 L20.5 15"/></svg>自动合成</button>`;
+    n._el.insertBefore(bar,foot);
+    bar.querySelector('[data-do=collage]').addEventListener("click",(e)=>{e.stopPropagation();openEnlarge(n);});
+    bar.querySelector('[data-do=compose]').addEventListener("click",(e)=>{e.stopPropagation();composeOutput(n);});
+  }
+
+  // 找到直接/间接连到输出节点的某类上游节点
+  function upstreamKinds(outId){
+    const found={};
+    // 收集所有能到达 out 的节点（简单反向遍历一层 + 两层）
+    const incoming=id=>edgeEls.filter(e=>e.to===id).map(e=>e.from);
+    const visited=new Set(), stack=[outId];
+    while(stack.length){
+      const id=stack.pop();
+      for(const from of incoming(id)){
+        if(visited.has(from)) continue; visited.add(from);
+        const n=nodeById(from); if(n&&!found[n._kind]) found[n._kind]=n;
+        stack.push(from);
+      }
+    }
+    return found;
+  }
+
+  function composeOutput(n){
+    const up=upstreamKinds(n.id);
+    const cut=up.cutout, pal=up.palette, txt=up.text, tex=up.texture, tplN=up.template;
+    const stage=n._el.querySelector(".p-stage");
+    if(!cut && !pal && !txt){ stage.innerHTML='<div class="empty">请先连接抠图 / 色板 / 文案<br>再点合成</div>'; return; }
+    const colors=(pal&&pal._colors)||["#7286a3","#31476f"];
+    const bg=`linear-gradient(160deg,${colors[0]},${colors[colors.length-1]})`;
+    const anno=(txt&&txt._anno)||{text:"应援手幅",tr:""};
+    const texCss=tex? (tex._tex.custom? `background:url(${tex._tex.custom}) center/cover`: tex._tex.preset.css) : "";
+    // 模板比例决定舞台宽高比
+    const ratio=tplN? TPL_SIZES[tplN._spec.sizeIdx].ratio : 3.0;
+    let html=`<div class="layer l-bg" style="${bg.startsWith('linear')?('background:'+bg):bg}"></div>`;
+    if(tex) html+=`<div class="layer l-tex" style="${texCss}"></div>`;
+    if(cut&&cut._src) html+=`<div class="layer l-cut"><img src="${cut._src}" alt=""></div>`;
+    html+=`<div class="layer l-slogan" style="color:${pickReadable(colors)}">${escapeHTML(anno.text)}</div>`;
+    if(anno.tr) html+=`<div class="layer l-sub">${escapeHTML(anno.tr)}</div>`;
+    stage.innerHTML=html;
+    // 依模板比例调整舞台高度（宽度固定，按比例给高）
+    const w=stage.clientWidth; stage.style.height=Math.max(70,Math.round(w/ratio))+"px";
+    n._composed=true;
+    n._el.querySelector(".foot").innerHTML="<span>已合成</span><span>READY</span>";
+    updateWires(); scheduleSave();
+  }
+  function escapeHTML(s){return (s||"").replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));}
+  function pickReadable(colors){
+    // 取一个与主色对比够高的文字色：亮底用深字，暗底用白
+    const hex=colors[0]||"#333"; const n=parseInt(hex.slice(1),16);
+    const r=(n>>16)&255,g=(n>>8)&255,b=n&255; const lum=0.299*r+0.587*g+0.114*b;
+    return lum>150? "#1b2230":"#ffffff";
+  }
+
+  /* —— 素材获取：拖拽/粘贴（灌进当前主选的可上传节点，否则新建）—— */
+  const fileToDataURL2=fileToDataURL;
+  async function ingestFiles(fileList){
+    const files=[...fileList].filter(f=>f.type.startsWith("image/"));
+    if(!files.length) return;
+    // 若当前主选是可上传节点，灌进去；否则新建图片节点
+    const target=primaryId?nodeById(primaryId):null;
+    if(target && target._kind==="image"){ const url=await fileToDataURL(files[0]); loadImageIntoNode(target,url); return; }
+    beginHistory();
+    for(const f of files){ const url=await fileToDataURL(f); addImageNode(url,(f.name||"素材图").replace(/\.[^.]+$/,"").slice(0,10)); }
+    pushHistory();
+  }
+  // 仍保留：新建独立图片节点（拖到空白处 / 无目标时）
+  function addImageNode(dataURL,label,at){
+    const p=at||spawnPoint();
+    const idx="S-"+String(++imgSeq).padStart(2,"0")+"n";
+    const n=createNode({x:p.x,y:p.y,w:232,idx,name:label||"素材图",meta:"IMAGE",foot:["已导入","READY"],
+      body:`<div class="p-photo"><img src="${dataURL}" alt="">`+`</div>`});
+    n._kind="image"; 
+    const body=n._el.querySelector(".body"); body.style.position="relative";
+    body.insertAdjacentHTML("beforeend",uploadOverlayHTML(n));
+    wireUploadOverlay(n);
+    loadImageIntoNode(n,dataURL);
+    return n;
+  }
+
+  const dropHint=document.getElementById("dropHint");
+  let dragDepth=0;
+  screenEl.addEventListener("dragenter",(e)=>{ if(![...e.dataTransfer.types].includes("Files"))return; e.preventDefault(); dragDepth++; dropHint.classList.add("on"); });
+  screenEl.addEventListener("dragover",(e)=>{ if([...e.dataTransfer.types].includes("Files")) e.preventDefault(); });
+  screenEl.addEventListener("dragleave",()=>{ dragDepth=Math.max(0,dragDepth-1); if(!dragDepth) dropHint.classList.remove("on"); });
+  screenEl.addEventListener("drop",async(e)=>{
+    if(!e.dataTransfer.files.length) return;
+    e.preventDefault(); dragDepth=0; dropHint.classList.remove("on");
+    // 拖到某个可上传节点上 → 灌进去；否则新建
+    const nodeEl=e.target.closest(".node");
+    const files=[...e.dataTransfer.files].filter(f=>f.type.startsWith("image/"));
+    if(!files.length) return;
+    if(nodeEl){ const n=nodeById(nodeEl.dataset.id); if(n && n._kind==="image"){ const url=await fileToDataURL(files[0]); loadImageIntoNode(n,url); return; } }
+    const at=screenToWorld(e.clientX,e.clientY);
+    beginHistory(); let i=0;
+    for(const f of files){ const url=await fileToDataURL(f); addImageNode(url,(f.name||"素材图").replace(/\.[^.]+$/,"").slice(0,10),{x:at.x-110+i*26,y:at.y-80+i*26}); i++; }
+    pushHistory();
+  });
+
+  // 粘贴：优先灌进主选的可上传节点
+  window.addEventListener("paste",async(e)=>{
+    const items=[...(e.clipboardData?.items||[])].filter(it=>it.type.startsWith("image/"));
+    if(!items.length) return;
+    const f=items[0].getAsFile(); if(!f) return;
+    const url=await fileToDataURL(f);
+    const target=primaryId?nodeById(primaryId):null;
+    if(target && target._kind==="image"){ loadImageIntoNode(target,url); }
+    else { beginHistory(); addImageNode(url,"粘贴图"); pushHistory(); }
+  });
+
+  /* —— NOTE 工具：仍支持新建便签 —— */
+  function spawnNoteNode(){
+    const p=spawnPoint();
+    const n=createNode({x:p.x,y:p.y,w:210,idx:"N-01",name:"便签",meta:"NOTE",foot:["双击编辑","MEMO"],
+      body:`<div class="p-note-edit" contenteditable="true"></div>`});
+    n._kind="note"; commit(()=>{}); selectOnly(n.id);
+  }
+
+  /* —— 忙碌遮罩 —— */
+  function nodeSetBusy(n,label){
+    let m=n._el.querySelector(".p-busy");
+    if(!m){ m=document.createElement("div"); m.className="p-busy"; n._el.querySelector(".screen-in").appendChild(m); }
+    m.innerHTML=`<span class="spin"></span><span>${label||"处理中"}</span>`; m.style.display="flex";
+  }
+  function nodeClearBusy(n){ const m=n._el.querySelector(".p-busy"); if(m) m.style.display="none"; }
+
+  // 找到该节点已连的某类下游节点（用于就地填充，而非新建）
+  function downstreamOfKind(n,kind){
+    for(const e of edgeEls){ if(e.from===n.id){ const t=nodeById(e.to); if(t && t._kind===kind) return t; } }
+    return null;
+  }
+
+  /* —— 二、抠图：结果就地填入相连的「抠图」节点，没有才新建 —— */
+  async function matteNode(n){
+    const srcImgs=(n._images&&n._images.length)?n._images:(n._src?[n._src]:[]);
+    if(!srcImgs.length) return;
+    try{
+      // 逐张抠图，并按连通元素拆分：每张图可能产出多个独立元素
+      const cutImgs=[];
+      for(let i=0;i<srcImgs.length;i++){
+        const pfx=srcImgs.length>1?`(${i+1}/${srcImgs.length}) `:"";
+        const parts=await matteToElements(srcImgs[i],msg=>nodeSetBusy(n,pfx+msg));
+        cutImgs.push(...parts);
+      }
+      let cut=downstreamOfKind(n,"cutout");
+      if(cut){
+        // 整组灌入抠图卡（多图网格），不重复抠图
+        loadImageIntoNode(cut,cutImgs[0],{alpha:true,images:cutImgs});
+        cut._canMatte=false; selectOnly(cut.id);
+      }else{
+        cut=createNode({x:n.x+300,y:n.y,w:212,idx:"C-"+String(++imgSeq).padStart(2,"0")+"n",name:"抠图",meta:"CUTOUT",
+          foot:["透明 PNG","ALPHA"],body:'<div class="p-photo alpha"></div>'});
+        cut._kind="cutout"; cut._canMatte=false;
+        const body=cut._el.querySelector(".body"); body.style.position="relative";
+        commit(()=>{ addEdge(n.id,cut.id); updateWires(); });
+        loadImageIntoNode(cut,cutImgs[0],{alpha:true,images:cutImgs});
+        selectOnly(cut.id);
+      }
+    }catch(err){
+      console.warn("抠图失败",err);
+      nodeSetBusy(n,"抠图失败"); setTimeout(()=>nodeClearBusy(n),1400); return;
+    }
+    nodeClearBusy(n);
+  }
+
+  /* —— 三、取色：结果就地填入相连的「色板」节点，没有才新建 —— */
+  function extractPalette(img,count=6){
+    const s=Math.min(1,160/Math.max(img.width,img.height));
+    const w=Math.max(1,Math.round(img.width*s)),h=Math.max(1,Math.round(img.height*s));
+    const c=document.createElement("canvas");c.width=w;c.height=h;
+    const ctx=c.getContext("2d",{willReadFrequently:true});ctx.drawImage(img,0,0,w,h);
+    const d=ctx.getImageData(0,0,w,h).data, px=[];
+    for(let i=0;i<d.length;i+=4){ if(d[i+3]<125) continue; px.push([d[i],d[i+1],d[i+2]]); }
+    if(!px.length) return ["#7286a3"];
+    return extractPaletteFromPixels(px,count);
+  }
+  // 中位切分核心：对像素数组提取 count 个代表色
+  function extractPaletteFromPixels(px,count=5){
+    const hex=([r,g,b])=>"#"+[r,g,b].map(n=>n.toString(16).padStart(2,"0")).join("").toUpperCase();
+    function cut(arr,depth){
+      if(!arr.length) return [];
+      if(depth===0||arr.length===1){const s=arr.reduce((a,p)=>[a[0]+p[0],a[1]+p[1],a[2]+p[2]],[0,0,0]);const n=arr.length;return[[Math.round(s[0]/n),Math.round(s[1]/n),Math.round(s[2]/n)]];}
+      const rng=[[255,0],[255,0],[255,0]];
+      for(const p of arr)for(let ch=0;ch<3;ch++){if(p[ch]<rng[ch][0])rng[ch][0]=p[ch];if(p[ch]>rng[ch][1])rng[ch][1]=p[ch];}
+      let chn=0,best=-1;for(let ch=0;ch<3;ch++){const sp=rng[ch][1]-rng[ch][0];if(sp>best){best=sp;chn=ch;}}
+      arr.sort((a,b)=>a[chn]-b[chn]);const mid=arr.length>>1;
+      return[...cut(arr.slice(0,mid),depth-1),...cut(arr.slice(mid),depth-1)];
+    }
+    const depth=Math.ceil(Math.log2(count))+2;
+    const cols=cut(px,depth);
+    const seen=new Set(),out=[];
+    for(const c of cols){const x=hex(c);if(!seen.has(x)){seen.add(x);out.push(x);} if(out.length>=count)break;}
+    return out;
+  }
+  const USE_LABEL=["主色","辅色","描边","阴影","高光","点缀"];
+  // 从多张图汇总取色：把每张缩略后的像素合并再做中位切分
+  async function extractPaletteFromMany(srcs,count=5){
+    const allPx=[];
+    for(const src of srcs){
+      const img=await loadImage(src);
+      const s=Math.min(1,120/Math.max(img.width,img.height));
+      const w=Math.max(1,Math.round(img.width*s)),h=Math.max(1,Math.round(img.height*s));
+      const c=document.createElement("canvas");c.width=w;c.height=h;
+      const ctx=c.getContext("2d",{willReadFrequently:true});ctx.drawImage(img,0,0,w,h);
+      const d=ctx.getImageData(0,0,w,h).data;
+      for(let i=0;i<d.length;i+=4){ if(d[i+3]<125) continue; allPx.push([d[i],d[i+1],d[i+2]]); }
+    }
+    if(!allPx.length) return ["#7286a3"];
+    return extractPaletteFromPixels(allPx,count);
+  }
+  function paletteBodyHTML(cols){
+    return '<div class="p-pal">'+cols.map((hex,i)=>
+      `<div class="row"><span class="chip" style="background:${hex}"></span><span class="hex">${hex}</span><span class="use">${USE_LABEL[i]||""}</span></div>`).join("")+'</div>';
+  }
+  async function paletteNode(n){
+    const imgs=(n._images&&n._images.length)?n._images:(n._src?[n._src]:[]);
+    if(!imgs.length) return;
+    nodeSetBusy(n,"分析取色中");
+    try{
+      const cols=await extractPaletteFromMany(imgs,5);
+      let pal=downstreamOfKind(n,"palette");
+      if(pal){
+        pal._el.querySelector(".body").innerHTML=paletteBodyHTML(cols);
+        pal._colors=cols; pal._el.querySelector(".foot").innerHTML="<span>自动取色</span><span>HEX</span>";
+        selectOnly(pal.id); scheduleSave();
+      }else{
+        pal=createNode({x:n.x+300,y:n.y+150,w:212,idx:"P-"+String(++imgSeq).padStart(2,"0")+"n",name:"色板",meta:"PALETTE",
+          foot:["自动取色","HEX"],body:paletteBodyHTML(cols)});
+        pal._kind="palette"; pal._colors=cols;
+        commit(()=>{ addEdge(n.id,pal.id); updateWires(); });
+        selectOnly(pal.id);
+      }
+    }catch(err){ console.warn("取色失败",err); }
+    nodeClearBusy(n);
+  }
+
+  // 便签双击进入编辑
+  screenEl.addEventListener("dblclick",(e)=>{
+    const ed=e.target.closest(".p-note-edit"); if(ed){ ed.focus(); return; }
+    // 双击卡片空白处 = 放大编辑
+    const nodeEl=e.target.closest(".node");
+    if(nodeEl){ const n=nodeById(nodeEl.dataset.id); if(n&&CARDS[n._kind]&&CARDS[n._kind].canEnlarge) openEnlarge(n); }
+  });
+
+  /* ========================================================= */
+  /* ==============  连接模式 · CONNECT  ==================== */
+  /* ========================================================= */
+  let connectMode=false, connectSrc=null;
+  function setConnectMode(on){
+    connectMode=on; screenEl.classList.toggle("connect",on);
+    if(!on&&connectSrc){ connectSrc._el.classList.remove("connect-src"); connectSrc=null; }
+  }
+  // 在连接模式下，点两张卡片即连线（在捕获阶段拦截，优先于拖拽/选择）
+  screenEl.addEventListener("pointerdown",(e)=>{
+    if(!connectMode) return;
+    if(e.target.closest("#dock,#rail,#controls,#topbar,#nav")){ return; }
+    const nodeEl=e.target.closest(".node");
+    if(!nodeEl){ if(connectSrc){connectSrc._el.classList.remove("connect-src");connectSrc=null;} return; }
+    e.stopPropagation();
+    const n=nodeById(nodeEl.dataset.id);
+    if(!connectSrc){ connectSrc=n; n._el.classList.add("connect-src"); }
+    else if(connectSrc===n){ n._el.classList.remove("connect-src"); connectSrc=null; }
+    else{
+      commit(()=>{ addEdge(connectSrc.id,n.id); updateWires(); });
+      connectSrc._el.classList.remove("connect-src"); connectSrc=null;
+    }
+  },true);
+
+  /* ========================================================= */
+  /* ==========  卡片放大细化编辑 · openEnlarge  =========== */
+  /* ========================================================= */
+  const modal=document.getElementById("enlargeModal");
+  const mBody=document.getElementById("mBody"), mIdx=document.getElementById("mIdx"),
+        mName=document.getElementById("mName"), mMeta=document.getElementById("mMeta");
+  const gridInput=document.getElementById("gridInput");
+  let _enlargeNode=null;
+  document.getElementById("mClose").addEventListener("click",closeEnlarge);
+  modal.addEventListener("pointerdown",(e)=>{ if(e.target===modal) closeEnlarge(); });
+  window.addEventListener("keydown",(e)=>{ if(e.key==="Escape"&&modal.classList.contains("on")) closeEnlarge(); });
+  function closeEnlarge(){ modal.classList.remove("on"); _enlargeNode=null; }
+
+  // 每张卡片右上角的删除按钮：删除该卡片（锁定卡片按钮隐藏）
+  function addCardDelBtn(n){
+    const b=document.createElement("button");
+    b.className="cardDel"; b.title="删除卡片";
+    b.innerHTML='<svg viewBox="0 0 24 24"><path d="M4 6.5 H20 M9 6.5 V4.5 H15 V6.5 M6.5 6.5 L7.5 20 H16.5 L17.5 6.5"/></svg>';
+    n._el.appendChild(b);
+    b.addEventListener("click",(e)=>{ e.stopPropagation(); if(!n._locked) deleteNodes([n.id]); });
+    b.addEventListener("pointerdown",(e)=>e.stopPropagation());
+  }
+
+  function addEnlargeBtn(n){
+    const b=document.createElement("button");
+    b.className="enlarge"; b.title="放大编辑";
+    b.innerHTML='<svg viewBox="0 0 24 24"><path d="M4 9 V4 H9 M15 4 H20 V9 M20 15 V20 H15 M9 20 H4 V15"/></svg>';
+    n._el.appendChild(b);
+    b.addEventListener("click",(e)=>{e.stopPropagation();openEnlarge(n);});
+    b.addEventListener("pointerdown",(e)=>e.stopPropagation());
+  }
+
+  function openEnlarge(n){
+    _enlargeNode=n; modal.classList.add("on");
+    mIdx.textContent=n.idx; mName.textContent=n.name; mMeta.textContent=n.meta;
+    renderEnlarge(n);
+  }
+  function renderEnlarge(n){
+    if(n._kind==="image"||n._kind==="reference"){
+      const imgs=n._images||(n._src?[n._src]:[]);
+      mBody.innerHTML=`<div class="m-grid">`+
+        imgs.map((src,i)=>`<div class="cell${i===0?' sel':''}" data-i="${i}"><img src="${src}"><button class="del" data-del="${i}">×</button></div>`).join("")+
+        `<div class="add" id="mAdd"><svg viewBox="0 0 24 24"><path d="M12 5 V19 M5 12 H19"/></svg></div>`+
+      `</div>`;
+      mBody.querySelector("#mAdd").addEventListener("click",()=>{ _gridTarget=n; gridInput.value=""; gridInput.click(); });
+      mBody.querySelectorAll(".cell").forEach(cell=>{
+        cell.addEventListener("click",(e)=>{
+          if(e.target.closest(".del")) return;
+          mBody.querySelectorAll(".cell").forEach(c=>c.classList.remove("sel")); cell.classList.add("sel");
+          const i=+cell.dataset.i; const imgs2=n._images||[n._src];
+          // 把选中图设为代表图（数组首位），卡片预览随之更新
+          n._images=[imgs2[i],...imgs2.filter((_,k)=>k!==i)];
+          n._src=n._images[0]; renderPhotoPreview(n); scheduleSave();
+        });
+      });
+      mBody.querySelectorAll("[data-del]").forEach(btn=>{
+        btn.addEventListener("click",(e)=>{
+          e.stopPropagation();
+          const i=+btn.dataset.del; if(!n._images) n._images=[n._src];
+          n._images.splice(i,1);
+          if(!n._images.length){ n._images=[]; n._hasImg=false; n._src=null;
+            n._el.querySelector(".body").innerHTML=uploadOverlayHTML(n); wireUploadOverlay(n); refreshNodeActions(n);
+          }else{ n._src=n._images[0]; renderPhotoPreview(n); }
+          scheduleSave(); renderEnlarge(n);
+        });
+      });
+    }else if(n._kind==="cutout"){
+      const imgs=(n._images&&n._images.length)?n._images:(n._src?[n._src]:[]);
+      if(!imgs.length){
+        mBody.innerHTML=`<div class="m-single"><div class="stage alpha"><span style="color:var(--phos-dim);font-size:11px">连接上游图片后点抠图</span></div></div>`;
+      }else if(imgs.length===1){
+        mBody.innerHTML=`<div class="m-single"><div class="stage alpha"><img src="${imgs[0]}"></div></div>`;
+      }else{
+        // 多张抠图：网格展示，可单独删除
+        mBody.innerHTML=`<div class="m-grid">`+
+          imgs.map((src,i)=>`<div class="cell" data-i="${i}" style="background-color:#2b3141;background-image:linear-gradient(45deg,rgba(255,255,255,.06) 25%,transparent 25% 75%,rgba(255,255,255,.06) 75%),linear-gradient(45deg,rgba(255,255,255,.06) 25%,transparent 25% 75%,rgba(255,255,255,.06) 75%);background-size:16px 16px;background-position:0 0,8px 8px"><img src="${src}" style="object-fit:contain"><button class="del" data-del="${i}">×</button></div>`).join("")+
+        `</div>`;
+        mBody.querySelectorAll("[data-del]").forEach(btn=>btn.addEventListener("click",(e)=>{
+          e.stopPropagation(); const i=+btn.dataset.del; n._images.splice(i,1);
+          if(!n._images.length){ n._hasImg=false; n._src=null; n._el.querySelector(".body").innerHTML=uploadOverlayHTML(n); wireUploadOverlay(n); }
+          else { n._src=n._images[0]; renderPhotoPreview(n); }
+          scheduleSave(); renderEnlarge(n);
+        }));
+      }
+    }else if(n._kind==="text"){
+      const a=n._anno||{text:"",tr:""};
+      mBody.innerHTML=`<div class="m-text"><div><label>正文</label><div class="ed" contenteditable="true" id="mLine">${escapeHTML(a.text)}</div></div>`+
+        `<div><label>翻译</label><div class="ed sub" contenteditable="true" id="mTr">${escapeHTML(a.tr)}</div></div></div>`;
+      const line=mBody.querySelector("#mLine"), tr=mBody.querySelector("#mTr");
+      line.addEventListener("input",()=>{ a.text=line.textContent; const el=n._el.querySelector(".p-anno .line"); if(el) el.textContent=a.text; });
+      tr.addEventListener("input",()=>{ a.tr=tr.textContent; const el=n._el.querySelector(".p-anno .tr"); if(el) el.textContent=a.tr; });
+    }else if(n._kind==="output"){
+      renderCollageEditor(n);
+    }else if(n._kind==="palette"){
+      const cols=n._colors||[];
+      if(!cols.length){
+        mBody.innerHTML=`<div class="m-single" style="align-items:center;justify-content:center;color:var(--phos-dim);font-size:12px">连接上游图片并点「取色」后<br>这里可查看 / 复制色值</div>`;
+      }else{
+        mBody.innerHTML=`<div class="m-pal-big">`+cols.map((hex,i)=>
+          `<div class="prow" data-hex="${hex}"><span class="sw" style="background:${hex}"></span>`+
+          `<span class="hx">${hex.toUpperCase()}</span><span class="use">${USE_LABEL[i]||""}</span>`+
+          `<button class="cp" title="复制色值">复制</button></div>`).join("")+`</div>`;
+        mBody.querySelectorAll(".cp").forEach(b=>b.addEventListener("click",(e)=>{
+          const hex=e.target.closest(".prow").dataset.hex;
+          navigator.clipboard&&navigator.clipboard.writeText(hex);
+          e.target.textContent="已复制"; setTimeout(()=>e.target.textContent="复制",900);
+        }));
+      }
+    }else if(n._kind==="template"){
+      mBody.innerHTML=`<div class="m-single" style="align-items:center;justify-content:center;color:var(--phos-dim)">模板规格在卡片上直接调整</div>`;
+    }else{
+      mBody.innerHTML=`<div class="m-single" style="align-items:center;justify-content:center;color:var(--phos-dim)">该卡片暂无放大编辑</div>`;
+    }
+  }
+  /* ============================================================
+     合成卡 · 自由拼贴编辑器（放大态）
+     - 左侧托盘列出所有连到本卡上游的「抠图」透明图 + 「文案」
+     - 点托盘项把它加到舞台，用户在舞台里自由拖动 / 缩放 / 删除
+     - 背景取自上游色板，比例取自上游模板
+     - 布局存在 n._collage，重开放大态可继续编辑
+     ============================================================ */
+  function collageContext(n){
+    const up=upstreamKinds(n.id);
+    // 反向遍历所有上游，收集抠图元素 / 文案 / 色板色 / 可当底纹的图片
+    const incoming=id=>edgeEls.filter(e=>e.to===id).map(e=>e.from);
+    const seen=new Set(), stack=[n.id];
+    const cutImgs=[], texts=[], palColors=[], bgImgs=[];
+    while(stack.length){ const id=stack.pop();
+      for(const from of incoming(id)){ if(seen.has(from))continue; seen.add(from);
+        const m=nodeById(from);
+        if(m){
+          if(m._kind==="cutout"){ const imgs=(m._images&&m._images.length)?m._images:(m._src?[m._src]:[]);
+            imgs.forEach((src,i)=>cutImgs.push({src, cutId:m.id, idx:i})); }
+          else if(m._kind==="text") texts.push(m);
+          else if(m._kind==="palette" && m._colors){ m._colors.forEach(c=>{ if(!palColors.includes(c)) palColors.push(c); }); }
+          else if(m._kind==="image"||m._kind==="reference"){
+            const imgs=(m._images&&m._images.length)?m._images:(m._src?[m._src]:[]);
+            imgs.forEach(src=>bgImgs.push(src)); }
+        }
+        stack.push(from);
+      }
+    }
+    return {cutImgs, texts, palColors, bgImgs, pal:up.palette, tpl:up.template};
+  }
+  // 归一化背景格式：兼容旧存档里 bg 是颜色数组的情况
+  function normalizeBg(bg,palCols){
+    if(!bg) return {type:"gradient", colors:[palCols[0],palCols[palCols.length-1]]};
+    if(Array.isArray(bg)) return {type:"gradient", colors:bg.length?bg:[palCols[0],palCols[palCols.length-1]]};
+    if(bg.type==="gradient" && !Array.isArray(bg.colors)) return {type:"gradient", colors:[palCols[0],palCols[palCols.length-1]]};
+    return bg;
+  }
+  function renderCollageEditor(n){
+    const ctx=collageContext(n);
+    // 背景：优先用户此前选的；否则用上游色板首/末色渐变
+    const palCols=ctx.palColors.length?ctx.palColors:["#7286a3","#31476f"];
+    const ratio=ctx.tpl? TPL_SIZES[ctx.tpl._spec.sizeIdx].ratio : 3.0;
+    if(!n._collage) n._collage={items:[], ratio};
+    n._collage.ratio=ratio;
+    // 背景默认/迁移：确保是 {type,...} 对象
+    n._collage.bg=normalizeBg(n._collage.bg, palCols);
+
+    // —— 左侧托盘 ——
+    // 1) 抠图素材：3 列正方形网格
+    let tray=`<div class="ttl">抠图素材</div>`;
+    if(ctx.cutImgs.length){
+      tray+=`<div class="grid3">`+ctx.cutImgs.map((c,i)=>`<div class="thumb" data-add-cut="${i}"><img src="${c.src}"><span class="add-badge">+</span></div>`).join("")+`</div>`;
+    }else{ tray+=`<div class="empty">还没有抠图。连接「上传图片 → 抠图」并抠好后，这里会列出可拼贴的透明素材。</div>`; }
+
+    // 2) 背景色：上游色板色 + 自定义拾色
+    tray+=`<div class="ttl">背景色</div>`;
+    const curBg=n._collage.bg;
+    const curSolid=(curBg.type==="solid")?curBg.color:null;
+    tray+=`<div class="cl-swatches">`+
+      palCols.map(c=>`<div class="sw${curSolid===c?' on':''}" data-bg-color="${c}" style="background:${c}" title="${c}"></div>`).join("")+
+      `<label class="sw pick" title="自定义颜色">+<input type="color" data-bg-pick value="${curSolid||palCols[0]}"></label>`+
+      `</div>`;
+    // 渐变按钮
+    tray+=`<div class="cl-swatches" style="margin-top:4px">`+
+      `<div class="sw${curBg.type==='gradient'?' on':''}" data-bg-grad style="background:linear-gradient(135deg,${palCols[0]},${palCols[palCols.length-1]})" title="色板渐变"></div>`+
+      `<span style="font-size:9px;color:var(--phos-dim);align-self:center">渐变</span>`+
+      `</div>`;
+
+    // 3) 图片底纹：把上游图片卡直接当背景铺满
+    tray+=`<div class="ttl">图片底纹</div>`;
+    if(ctx.bgImgs.length){
+      const curTex=(curBg.type==="image")?curBg.src:null;
+      tray+=`<div class="cl-bgtex">`+
+        `<div class="bt none${!curTex?'':''}" data-bg-none title="不使用底纹">无</div>`+
+        ctx.bgImgs.map((src,i)=>`<div class="bt${curTex===src?' on':''}" data-bg-img="${i}"><img src="${src}"></div>`).join("")+
+        `</div>`;
+    }else{ tray+=`<div class="empty">连一张「上传图片」卡到本卡，即可把它当背景底纹。</div>`; }
+
+    // 4) 文案：连接的文案卡 + 界面内直接添加
+    tray+=`<div class="ttl">文案</div>`;
+    if(ctx.texts.length){
+      tray+=ctx.texts.map(t=>`<div class="txt-chip" data-add-txt="${t.id}">${escapeHTML((t._anno&&t._anno.text)||"文案")} +</div>`).join("");
+    }
+    tray+=`<div class="cl-addtext"><input type="text" id="clNewText" placeholder="输入文字后加入…"><button id="clAddText">添加</button></div>`;
+
+    mBody.innerHTML=
+      `<div class="m-collage">`+
+      `<div class="cl-tray">${tray}</div>`+
+      `<div class="cl-main">`+
+        `<div class="cl-bar">`+
+          `<button data-cl="up" title="上移一层"><svg viewBox="0 0 24 24"><path d="M12 4 L12 20 M6 10 L12 4 L18 10"/></svg>上移</button>`+
+          `<button data-cl="down" title="下移一层"><svg viewBox="0 0 24 24"><path d="M12 20 L12 4 M6 14 L12 20 L18 14"/></svg>下移</button>`+
+          `<button data-cl="front" title="置顶"><svg viewBox="0 0 24 24"><rect x="4" y="4" width="11" height="11" rx="1.5"/><rect x="9" y="9" width="11" height="11" rx="1.5"/></svg>置顶</button>`+
+          `<button data-cl="back" title="置底"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11" rx="1.5"/><rect x="4" y="4" width="11" height="11" rx="1.5"/></svg>置底</button>`+
+          `<button data-cl="del" title="删除选中"><svg viewBox="0 0 24 24"><path d="M4 6.5 H20 M9 6.5 V4.5 H15 V6.5 M6.5 6.5 L7.5 20 H16.5 L17.5 6.5"/></svg>删除</button>`+
+          `<span class="sp"></span>`+
+          `<button data-cl="export" title="导出 PNG"><svg viewBox="0 0 24 24"><path d="M12 4 V15 M8 11 L12 15 L16 11"/><path d="M5 15 V19 A1.5 1.5 0 0 0 6.5 20.5 H17.5 A1.5 1.5 0 0 0 19 19 V15"/></svg>导出PNG</button>`+
+          `<button data-cl="apply" title="应用到卡片预览"><svg viewBox="0 0 24 24"><path d="M4 12 L10 18 L20 6"/></svg>应用到卡片</button>`+
+        `</div>`+
+        `<div class="cl-stagewrap"><div class="cl-stagebox" id="clBox"><div class="cl-stage" id="clStage"></div><div class="cl-overlay" id="clOverlay"></div></div></div>`+
+      `</div></div>`;
+
+    const wrap=mBody.querySelector(".cl-stagewrap");
+    const box=mBody.querySelector("#clBox");
+    const stage=mBody.querySelector("#clStage");
+    const overlay=mBody.querySelector("#clOverlay");
+
+    // 依当前背景设置渲染舞台底
+    function applyStageBg(){
+      const bg=n._collage.bg;
+      if(bg.type==="solid"){ stage.style.background=bg.color; }
+      else if(bg.type==="image"){ stage.style.background=`center/cover no-repeat url(${bg.src})`; }
+      else { stage.style.background=`linear-gradient(160deg,${bg.colors[0]},${bg.colors[bg.colors.length-1]})`; }
+    }
+    function sizeStage(){
+      const availW=wrap.clientWidth-20, availH=wrap.clientHeight-20;
+      let w=availW, h=w/ratio;
+      if(h>availH){ h=availH; w=h*ratio; }
+      box.style.width=Math.round(w)+"px"; box.style.height=Math.round(h)+"px";
+    }
+    sizeStage(); applyStageBg();
+
+    // 文字色：跟随背景（浅底深字/暗底白字）
+    function bgTextColor(){
+      const bg=n._collage.bg;
+      if(bg.type==="solid") return pickReadable([bg.color]);
+      if(bg.type==="gradient") return pickReadable(bg.colors);
+      return "#ffffff"; // 图片底纹默认白字带阴影
+    }
+
+    const CW=()=>box.clientWidth, CH=()=>box.clientHeight;
+    function draw(){
+      stage.querySelectorAll(".cl-item").forEach(el=>el.remove());
+      n._collage.items.forEach((it,i)=>{
+        const el=document.createElement("div"); el.className="cl-item"+(it.type==="txt"?" txt":"");
+        el.dataset.i=i;
+        el.style.left=(it.x*CW())+"px"; el.style.top=(it.y*CH())+"px";
+        el.style.width=(it.w*CW())+"px"; el.style.height=(it.h*CH())+"px";
+        el.style.zIndex=it.z||1;
+        if(it.type==="cut"){ el.innerHTML=`<img src="${it.src}">`; }
+        else { el.style.color=it.color||bgTextColor(); el.style.fontSize=Math.max(10,Math.round(it.h*CH()*0.5))+"px"; el.textContent=it.text; }
+        stage.appendChild(el);
+      });
+      applyClSel();
+    }
+    let selIdx=-1;
+    // 选中框 + 手柄画在不裁切的 overlay 上，这样素材超出画布也能选中/拖拽/缩放
+    function applyClSel(){
+      overlay.innerHTML="";
+      if(selIdx<0||!n._collage.items[selIdx]) return;
+      const it=n._collage.items[selIdx];
+      const sel=document.createElement("div"); sel.className="cl-sel"; sel.dataset.i=selIdx;
+      sel.style.left=(it.x*CW())+"px"; sel.style.top=(it.y*CH())+"px";
+      sel.style.width=(it.w*CW())+"px"; sel.style.height=(it.h*CH())+"px";
+      sel.innerHTML=`<span class="h br"></span><span class="h del">×</span>`;
+      overlay.appendChild(sel);
+    }
+    function syncSelBox(){
+      const sel=overlay.querySelector(".cl-sel"); if(!sel||selIdx<0) return;
+      const it=n._collage.items[selIdx]; if(!it) return;
+      sel.style.left=(it.x*CW())+"px"; sel.style.top=(it.y*CH())+"px";
+      sel.style.width=(it.w*CW())+"px"; sel.style.height=(it.h*CH())+"px";
+    }
+
+    // —— 托盘交互 ——
+    // 抠图素材加入
+    mBody.querySelectorAll("[data-add-cut]").forEach(t=>t.addEventListener("click",()=>{
+      const c=ctx.cutImgs[+t.dataset.addCut]; if(!c) return;
+      n._collage.items.push({type:"cut", src:c.src, x:0.34, y:0.18, w:0.3, h:0.6, z:(n._collage.items.length+1)});
+      selIdx=n._collage.items.length-1; draw(); scheduleSave();
+    }));
+    // 背景：色板色
+    mBody.querySelectorAll("[data-bg-color]").forEach(sw=>sw.addEventListener("click",()=>{
+      n._collage.bg={type:"solid", color:sw.dataset.bgColor};
+      applyStageBg(); renderCollageEditor(n);
+    }));
+    // 背景：自定义拾色
+    const pick=mBody.querySelector("[data-bg-pick]");
+    if(pick) pick.addEventListener("input",()=>{ n._collage.bg={type:"solid", color:pick.value}; applyStageBg(); scheduleSave(); });
+    // 背景：渐变
+    const grad=mBody.querySelector("[data-bg-grad]");
+    if(grad) grad.addEventListener("click",()=>{ n._collage.bg={type:"gradient", colors:[palCols[0],palCols[palCols.length-1]]}; applyStageBg(); renderCollageEditor(n); });
+    // 背景：图片底纹
+    mBody.querySelectorAll("[data-bg-img]").forEach(bt=>bt.addEventListener("click",()=>{
+      n._collage.bg={type:"image", src:ctx.bgImgs[+bt.dataset.bgImg]}; applyStageBg(); renderCollageEditor(n);
+    }));
+    const bgNone=mBody.querySelector("[data-bg-none]");
+    if(bgNone) bgNone.addEventListener("click",()=>{ n._collage.bg={type:"gradient", colors:[palCols[0],palCols[palCols.length-1]]}; applyStageBg(); renderCollageEditor(n); });
+    // 文案：连接的文案卡加入
+    mBody.querySelectorAll("[data-add-txt]").forEach(t=>t.addEventListener("click",()=>{
+      const tx=nodeById(t.dataset.addTxt); const txt=(tx&&tx._anno&&tx._anno.text)||"应援";
+      n._collage.items.push({type:"txt", text:txt, color:bgTextColor(), x:0.2, y:0.08, w:0.6, h:0.16, z:(n._collage.items.length+1)});
+      selIdx=n._collage.items.length-1; draw(); scheduleSave();
+    }));
+    // 文案：界面内直接添加
+    function addFreeText(){
+      const inp=mBody.querySelector("#clNewText"); const txt=(inp.value||"").trim(); if(!txt) return;
+      n._collage.items.push({type:"txt", text:txt, color:bgTextColor(), x:0.2, y:0.08, w:0.6, h:0.16, z:(n._collage.items.length+1)});
+      inp.value=""; selIdx=n._collage.items.length-1; draw(); scheduleSave();
+    }
+    const addBtn=mBody.querySelector("#clAddText");
+    if(addBtn) addBtn.addEventListener("click",addFreeText);
+    const newTextInp=mBody.querySelector("#clNewText");
+    if(newTextInp) newTextInp.addEventListener("keydown",e=>{ if(e.key==="Enter"){ e.preventDefault(); addFreeText(); } });
+
+    // 层级：以数组顺序为准（后面的在上层），z 只是同步用；相邻交换实现"上/下移一层"
+    function reindexZ(){ n._collage.items.forEach((it,k)=>it.z=k+1); }
+    function moveItem(from,to){
+      if(from<0||to<0||to>=n._collage.items.length) return;
+      const arr=n._collage.items; const [it]=arr.splice(from,1); arr.splice(to,0,it);
+      reindexZ(); selIdx=to; draw(); scheduleSave();
+    }
+    mBody.querySelector('[data-cl=up]').addEventListener("click",()=>{ if(selIdx<0)return; moveItem(selIdx,selIdx+1); });   // 上移一层 = 往数组后挪
+    mBody.querySelector('[data-cl=down]').addEventListener("click",()=>{ if(selIdx<0)return; moveItem(selIdx,selIdx-1); }); // 下移一层
+    mBody.querySelector('[data-cl=front]').addEventListener("click",()=>{ if(selIdx<0)return; moveItem(selIdx,n._collage.items.length-1); }); // 置顶
+    mBody.querySelector('[data-cl=back]').addEventListener("click",()=>{ if(selIdx<0)return; moveItem(selIdx,0); }); // 置底
+    mBody.querySelector('[data-cl=del]').addEventListener("click",()=>{ if(selIdx<0)return; n._collage.items.splice(selIdx,1); reindexZ(); selIdx=-1; draw(); scheduleSave(); });
+    mBody.querySelector('[data-cl=export]').addEventListener("click",()=>{ exportCollagePNG(n); });
+    mBody.querySelector('[data-cl=apply]').addEventListener("click",()=>{ composeFromCollage(n); });
+
+    // 交互统一挂在 box 上：stage 内容点选、overlay 手柄拖拽/缩放/删除都能收到
+    let drag=null;
+    box.addEventListener("pointerdown",(e)=>{
+      // 1) 先看是否点到 overlay 上的手柄/选中框
+      const handleDel=e.target.closest(".cl-sel .del");
+      if(handleDel){ if(selIdx>=0){ n._collage.items.splice(selIdx,1); reindexZ(); selIdx=-1; draw(); scheduleSave(); } e.stopPropagation(); return; }
+      const handleBr=e.target.closest(".cl-sel .br");
+      const selBox=e.target.closest(".cl-sel");
+      if(selBox && selIdx>=0){
+        const it=n._collage.items[selIdx];
+        const mode=handleBr?"resize":"move";
+        drag={i:selIdx,mode,sx:e.clientX,sy:e.clientY,ox:it.x,oy:it.y,ow:it.w,oh:it.h};
+        selBox.classList.add("dragging"); box.setPointerCapture(e.pointerId); e.stopPropagation(); return;
+      }
+      // 2) 否则看是否点到画布内的素材（选中它）
+      const itemEl=e.target.closest(".cl-item");
+      if(!itemEl){ selIdx=-1; applyClSel(); return; }
+      const i=+itemEl.dataset.i; selIdx=i; applyClSel();
+      const it=n._collage.items[i];
+      drag={i,mode:"move",sx:e.clientX,sy:e.clientY,ox:it.x,oy:it.y,ow:it.w,oh:it.h};
+      const sb=overlay.querySelector(".cl-sel"); if(sb) sb.classList.add("dragging");
+      box.setPointerCapture(e.pointerId); e.stopPropagation();
+    });
+    box.addEventListener("pointermove",(e)=>{
+      if(!drag) return; const it=n._collage.items[drag.i]; if(!it) return;
+      const dx=(e.clientX-drag.sx)/CW(), dy=(e.clientY-drag.sy)/CH();
+      if(drag.mode==="move"){
+        it.x=Math.min(1.5,Math.max(-0.5,drag.ox+dx)); it.y=Math.min(1.5,Math.max(-0.5,drag.oy+dy));
+      } else {
+        it.w=Math.max(0.05,Math.min(3,drag.ow+dx)); it.h=Math.max(0.05,Math.min(3,drag.oh+dy));
+      }
+      // 同步画布内素材位置 + overlay 选中框
+      const el=stage.querySelector(`.cl-item[data-i="${drag.i}"]`);
+      if(el){ el.style.left=(it.x*CW())+"px"; el.style.top=(it.y*CH())+"px";
+        el.style.width=(it.w*CW())+"px"; el.style.height=(it.h*CH())+"px";
+        if(it.type==="txt") el.style.fontSize=Math.max(10,Math.round(it.h*CH()*0.5))+"px"; }
+      syncSelBox();
+    });
+    function endCl(e){ if(drag){ const sb=overlay.querySelector(".cl-sel.dragging"); if(sb)sb.classList.remove("dragging"); drag=null; scheduleSave(); } }
+    box.addEventListener("pointerup",endCl); box.addEventListener("pointercancel",endCl);
+
+    draw();
+  }
+
+  /* ============================================================
+     导出拼贴为 PNG：按模板比例画一张高清画布，绘制背景 + 各元素，
+     超出画布的部分自然被裁切；触发浏览器下载。
+     ============================================================ */
+  async function exportCollagePNG(n){
+    const col=n._collage||{items:[]};
+    const ratio=col.ratio||3.0;
+    // 输出分辨率：长边固定 2000px，保证清晰
+    const OUT_W=2000, OUT_H=Math.round(OUT_W/ratio);
+    const cv=document.createElement("canvas"); cv.width=OUT_W; cv.height=OUT_H;
+    const ctx=cv.getContext("2d");
+    // 背景
+    let bgo=col.bg||{type:"gradient",colors:["#7286a3","#31476f"]};
+    if(Array.isArray(bgo)) bgo={type:"gradient",colors:bgo.length?bgo:["#7286a3","#31476f"]};
+    if(bgo.type==="solid"){ ctx.fillStyle=bgo.color; ctx.fillRect(0,0,OUT_W,OUT_H); }
+    else if(bgo.type==="image"){
+      try{ const bim=await loadImage(bgo.src);
+        // cover 填充
+        const s=Math.max(OUT_W/bim.width, OUT_H/bim.height);
+        const dw=bim.width*s, dh=bim.height*s;
+        ctx.drawImage(bim,(OUT_W-dw)/2,(OUT_H-dh)/2,dw,dh);
+      }catch(_){ ctx.fillStyle="#20242f"; ctx.fillRect(0,0,OUT_W,OUT_H); }
+    }else{
+      const g=ctx.createLinearGradient(0,0,OUT_W,OUT_H);
+      const c0=bgo.colors[0], c1=bgo.colors[bgo.colors.length-1];
+      g.addColorStop(0,c0); g.addColorStop(1,c1); ctx.fillStyle=g; ctx.fillRect(0,0,OUT_W,OUT_H);
+    }
+    // 元素：按数组顺序（z 从低到高）
+    const items=[...(col.items||[])].sort((a,b)=>(a.z||1)-(b.z||1));
+    for(const it of items){
+      const x=it.x*OUT_W, y=it.y*OUT_H, w=it.w*OUT_W, h=it.h*OUT_H;
+      if(it.type==="cut"){
+        try{ const im=await loadImage(it.src);
+          // object-fit:contain 居中
+          const s=Math.min(w/im.width, h/im.height);
+          const dw=im.width*s, dh=im.height*s;
+          ctx.drawImage(im, x+(w-dw)/2, y+(h-dh)/2, dw, dh);
+        }catch(_){}
+      }else{
+        const fs=Math.max(12, Math.round(h*0.5));
+        ctx.save();
+        ctx.font=`700 ${fs}px -apple-system,"PingFang SC","Microsoft YaHei",sans-serif`;
+        ctx.textAlign="center"; ctx.textBaseline="middle";
+        ctx.fillStyle=it.color||"#ffffff";
+        ctx.shadowColor="rgba(0,0,0,.55)"; ctx.shadowBlur=4; ctx.shadowOffsetY=1;
+        ctx.fillText(it.text||"", x+w/2, y+h/2);
+        ctx.restore();
+      }
+    }
+    // 触发下载
+    cv.toBlob(blob=>{
+      if(!blob) return;
+      const url=URL.createObjectURL(blob);
+      const a=document.createElement("a");
+      a.href=url; a.download=(n.idx||"应援手幅")+".png";
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(()=>URL.revokeObjectURL(url),2000);
+    },"image/png");
+  }
+
+  // 把拼贴布局烘焙回卡片上的小舞台预览（所见即所得）
+  function composeFromCollage(n){
+    const stage=n._el.querySelector(".p-stage");
+    const ratio=(n._collage&&n._collage.ratio)||3.0;
+    // 背景对象：solid / gradient / image
+    let bgo=(n._collage&&n._collage.bg)||{type:"gradient",colors:["#7286a3","#31476f"]};
+    if(Array.isArray(bgo)) bgo={type:"gradient",colors:bgo.length?bgo:["#7286a3","#31476f"]};
+    let bg;
+    if(bgo.type==="solid") bg=`background:${bgo.color}`;
+    else if(bgo.type==="image") bg=`background:center/cover no-repeat url(${bgo.src})`;
+    else bg=`background:linear-gradient(160deg,${bgo.colors[0]},${bgo.colors[bgo.colors.length-1]})`;
+    let html=`<div class="layer l-bg" style="${bg}"></div>`;
+    const items=[...(n._collage?n._collage.items:[])].sort((a,b)=>(a.z||1)-(b.z||1));
+    for(const it of items){
+      const style=`left:${(it.x*100).toFixed(2)}%;top:${(it.y*100).toFixed(2)}%;width:${(it.w*100).toFixed(2)}%;height:${(it.h*100).toFixed(2)}%;z-index:${it.z||1}`;
+      if(it.type==="cut"){ html+=`<div class="layer cl-p" style="${style}"><img src="${it.src}" style="width:100%;height:100%;object-fit:contain"></div>`; }
+      else { html+=`<div class="layer cl-p" style="${style};display:flex;align-items:center;justify-content:center;color:${it.color||'#fff'};font-weight:700;letter-spacing:.08em;text-align:center;text-shadow:0 1px 3px rgba(0,0,0,.55);font-size:clamp(8px,${(it.h*40).toFixed(1)}px,40px)">${escapeHTML(it.text)}</div>`; }
+    }
+    stage.innerHTML=html;
+    const w=stage.clientWidth; stage.style.height=Math.max(70,Math.round(w/ratio))+"px";
+    n._composed=true;
+    n._el.querySelector(".foot").innerHTML="<span>已拼贴</span><span>READY</span>";
+    updateWires(); scheduleSave();
+  }
+
+  // 放大态多图上传
+  let _gridTarget=null;
+  gridInput.addEventListener("change",async()=>{
+    const files=[...gridInput.files].filter(f=>f.type.startsWith("image/")); if(!files.length||!_gridTarget) return;
+    const n=_gridTarget;
+    for(const f of files){ const url=await fileToDataURL(f); loadImageIntoNode(n,url,{append:!!n._hasImg&&(n._images&&n._images.length>0)}); }
+    // 确保多图数组完整
+    renderEnlarge(n);
+  });
+  function loadImageMulti(n,imgs){ /* 占位：保持 _images 与展示同步，展示已在 loadImageIntoNode 处理 */ }
+
+  /* —— 空画布提示 —— */
+  const emptyHint=document.getElementById("emptyHint");
+  function refreshEmptyHint(){ emptyHint.classList.toggle("hide", nodes.length>0); }
+  refreshEmptyHint();
+
+  /* ============================================================
+     本地自动保存 · localStorage（实时保存，刷新不丢）
+     - serializeState(): 把所有卡片 + 连线 + 相机 + 计数器打包成对象
+     - applyState(): 从对象重建整个画布
+     - scheduleSave(): 去抖后写入 localStorage；任何改动都会触发
+     ============================================================ */
+  const SAVE_KEY="fan-canvas-v14";
+  let _loading=false;         // 载入存档期间，抑制自动保存与历史
+  let _saveTimer=null;
+
+  /* —— IndexedDB 存储：localStorage 只有 ~5MB，装不下 base64 图片，改用 IDB —— */
+  const IDB_DB="fanCanvasDB", IDB_STORE="state";
+  function idbOpen(){
+    return new Promise((res,rej)=>{
+      const req=indexedDB.open(IDB_DB,1);
+      req.onupgradeneeded=()=>{ const db=req.result; if(!db.objectStoreNames.contains(IDB_STORE)) db.createObjectStore(IDB_STORE); };
+      req.onsuccess=()=>res(req.result);
+      req.onerror=()=>rej(req.error);
+    });
+  }
+  async function idbPut(key,val){
+    const db=await idbOpen();
+    return new Promise((res,rej)=>{
+      const tx=db.transaction(IDB_STORE,"readwrite");
+      tx.objectStore(IDB_STORE).put(val,key);
+      tx.oncomplete=()=>res(true); tx.onerror=()=>rej(tx.error);
+    });
+  }
+  async function idbGet(key){
+    const db=await idbOpen();
+    return new Promise((res,rej)=>{
+      const tx=db.transaction(IDB_STORE,"readonly");
+      const rq=tx.objectStore(IDB_STORE).get(key);
+      rq.onsuccess=()=>res(rq.result||null); rq.onerror=()=>rej(rq.error);
+    });
+  }
+
+  function serializeState(){
+    return {
+      v:1,
+      cam:{panX,panY,scale},
+      seq:{seqByKind:{...seqByKind}, idSeq, imgSeq, groupSeq, zTop, zBottom},
+      nodes:nodes.map(n=>({
+        id:n.id, kind:n._kind, x:n.x, y:n.y, w:n.w,
+        idx:n.idx, name:n.name, meta:n.meta,
+        group:n._group||null, locked:!!n._locked, hidden:!!n._hidden,
+        z:n._el?n._el.style.zIndex||"":"",
+        src:n._src||null, images:(n._images&&n._images.slice())||null,
+        canMatte:n._canMatte, canPalette:n._canPalette,
+        anno:n._anno?{...n._anno}:null,
+        spec:n._spec?{...n._spec}:null,
+        colors:n._colors?n._colors.slice():null,
+        collage:n._collage?JSON.parse(JSON.stringify(n._collage)):null,
+        composed:!!n._composed,
+      })),
+      edges:edgeEls.map(e=>[e.from,e.to]),
+    };
+  }
+
+  function scheduleSave(){
+    if(_loading) return;
+    clearTimeout(_saveTimer);
+    _saveTimer=setTimeout(async()=>{
+      try{ await idbPut(SAVE_KEY, serializeState()); markSaved(); }
+      catch(err){ console.warn("自动保存失败",err); markSaved("保存失败"); }
+    },350);
+  }
+  // 顶栏 AUTO-SAVE 状态灯
+  function markSaved(msg){
+    const el=document.getElementById("saveTime"); if(!el) return;
+    if(msg){ el.textContent=msg; return; }
+    const d=new Date(),p=x=>String(x).padStart(2,"0");
+    el.textContent=`${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
+  }
+
+  // 重建单张卡片的内容与状态（addCard 已完成骨架 + 事件绑定）
+  function rehydrateNode(sn){
+    const n=addCard(sn.kind, {x:sn.x, y:sn.y});   // 复用工厂：骨架 + 交互全绑好
+    // 覆盖基础属性
+    n.x=sn.x; n.y=sn.y; if(sn.w) n.w=sn.w;
+    n._el.style.left=n.x+"px"; n._el.style.top=n.y+"px"; if(sn.w) n._el.style.width=sn.w+"px";
+    if(sn.idx){ n.idx=sn.idx; const ix=n._el.querySelector(".head .idx"); if(ix) ix.textContent=sn.idx; }
+    n._group=sn.group||null; n._locked=!!sn.locked; n._hidden=!!sn.hidden;
+    if(sn.z!=="") n._el.style.zIndex=sn.z;
+    n._el.style.display=n._hidden?"none":"";
+    n._el.classList.toggle("locked",!!n._locked);
+    // id 对齐（保证连线能配上）
+    const oldId=n.id;
+    if(sn.id && sn.id!==n.id){ n.id=sn.id; n._el.dataset.id=sn.id; if(n._layerRow) n._layerRow.dataset.id=sn.id; }
+    // 各类内容还原
+    if(sn.kind==="image"||sn.kind==="reference"){
+      if(sn.src) loadImageIntoNode(n, sn.src, {images:sn.images||[sn.src]});
+    }else if(sn.kind==="cutout"){
+      if(sn.src){ loadImageIntoNode(n, sn.src, {alpha:true, images:sn.images||[sn.src]}); n._canMatte=false; }
+    }else if(sn.kind==="palette"){
+      if(sn.colors){ n._colors=sn.colors.slice();
+        n._el.querySelector(".body").innerHTML=paletteBodyHTML(n._colors);
+        n._el.querySelector(".foot").innerHTML="<span>自动取色</span><span>HEX</span>"; }
+    }else if(sn.kind==="text"){
+      if(sn.anno){ n._anno={...n._anno,...sn.anno};
+        const line=n._el.querySelector(".p-anno .line"), tr=n._el.querySelector(".p-anno .tr");
+        if(line) line.textContent=n._anno.text||"";
+        if(tr) tr.textContent=n._anno.tr||"";
+        n._el.querySelectorAll(".p-anno select[data-anno]").forEach(sel=>{ const v=n._anno[sel.dataset.anno]; if(v!=null) sel.value=v; }); }
+    }else if(sn.kind==="template"){
+      if(sn.spec){ n._spec={...n._spec,...sn.spec};
+        const rt=n._el.querySelector('[data-spec="rt"]'); if(rt&&TPL_SIZES[n._spec.sizeIdx]) rt.textContent=TPL_SIZES[n._spec.sizeIdx].mm;
+        n._el.querySelectorAll(".p-spec select").forEach(sel=>{
+          if(sel.dataset.spec==="size") sel.value=String(n._spec.sizeIdx);
+          else if(sel.dataset.spec==="dpi") sel.value=n._spec.dpi;
+          else if(sel.dataset.spec==="mode") sel.value=n._spec.mode;
+        }); }
+    }else if(sn.kind==="output"){
+      if(sn.collage) n._collage=sn.collage;
+      if(sn.composed && n._collage){ composeFromCollage(n); }
+    }
+    if(sn.canMatte!=null) n._canMatte=sn.canMatte;
+    if(sn.canPalette!=null) n._canPalette=sn.canPalette;
+    return n;
+  }
+
+  function clearCanvas(){
+    // 移除所有连线与卡片 DOM
+    [...edgeEls].forEach(e=>removeEdge(e));
+    for(const n of [...nodes]){ if(n._el&&n._el.parentNode) n._el.parentNode.removeChild(n._el); if(n._layerRow&&n._layerRow.parentNode) n._layerRow.parentNode.removeChild(n._layerRow); }
+    nodes.length=0;
+    selection.clear(); primaryId=null;
+    history.length=0; future.length=0; refreshHistBtns();
+    refreshEmptyHint();
+  }
+
+  function applyState(st){
+    if(!st||!st.nodes) return false;
+    _loading=true;
+    clearCanvas();
+    try{
+      for(const sn of st.nodes) rehydrateNode(sn);
+      for(const [from,to] of (st.edges||[])) addEdge(from,to);
+      // 计数器还原，保证后续新建 idx 不冲突
+      if(st.seq){
+        if(st.seq.seqByKind) Object.assign(seqByKind, st.seq.seqByKind);
+        if(st.seq.idSeq!=null) idSeq=st.seq.idSeq;
+        if(st.seq.imgSeq!=null) imgSeq=st.seq.imgSeq;
+        if(st.seq.groupSeq!=null) groupSeq=st.seq.groupSeq;
+        if(st.seq.zTop!=null) zTop=st.seq.zTop;
+        if(st.seq.zBottom!=null) zBottom=st.seq.zBottom;
+      }
+      if(st.cam){ panX=st.cam.panX; panY=st.cam.panY; scale=st.cam.scale; applyTransform(); }
+      updateWires(); refreshEmptyHint();
+    }finally{ _loading=false; }
+    return true;
+  }
+
+  async function loadSaved(){
+    let st=null; try{ st=await idbGet(SAVE_KEY); }catch(_){}
+    if(!st) return false;
+    try{ return applyState(st); }
+    catch(err){ console.warn("载入存档失败",err); return false; }
+  }
+
+  // 便签仍可用（保留）
+  // 暴露给测试
+  window.__api={addCard,loadImageIntoNode,matteNode,paletteNode,ingestFiles,addImageNode,nodes,edgeEls,createNode,nodeById,downstreamOfKind,composeOutput,upstreamKinds,setConnectMode,openEnlarge,addEdge,deleteNodes,deleteSelection,removeEdge,selectOnly,undo,redo,renderCollageEditor,composeFromCollage,exportCollagePNG,collageContext,splitByComponents,matteToElements,smartMatte,cutoutHD,serializeState,applyState,loadSaved,scheduleSave,clearCanvas,SAVE_KEY};
+
+  window.addEventListener("resize",()=>{applyTransform();updateWires()});
+
+  // 启动即恢复上次存档（若有）
+  loadSaved();
+  // 后台预热高清抠图模型（失败静默，不影响使用）
+  warmupHd();
+  // 关窗/刷新前尽力再存一次（IDB 异步，主要依赖平时的实时保存）
+  window.addEventListener("pagehide",()=>{ try{ idbPut(SAVE_KEY, serializeState()); }catch(_){} });
+
+  requestAnimationFrame(()=>{applyTransform();updateWires()});
+</script>
+</body>
+</html>

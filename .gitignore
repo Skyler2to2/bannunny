@@ -1,0 +1,7 @@
+# 只发布 Bannunny 应援物料工具，忽略仓库里其它无关内容
+*
+
+# 放行部署所需文件
+!index.html
+!.gitignore
+!README.md
